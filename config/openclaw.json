@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "ollama/gemma4:27b",
+      "models": [
+        "ollama/gemma4:27b",
+        "ollama/gemma4:12b",
+        "ollama/gemma4"
+      ],
+      "maxTokens": 8192,
+      "temperature": 0.3
+    },
+    "lite": {
+      "model": "ollama/gemma4:4b",
+      "maxTokens": 2048,
+      "temperature": 0.2,
+      "description": "Fast model for simple replies, rewrites, and short tasks"
+    },
+    "pro": {
+      "model": "ollama/gemma4:27b",
+      "maxTokens": 16384,
+      "temperature": 0.4,
+      "description": "Full model for coding, planning, memory synthesis, multi-step tool use"
+    }
+  },
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://localhost:11434",
+        "description": "Use native Ollama endpoint (NOT /v1) for proper tool-calling support"
+      }
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "provider": "whatsapp-business-api",
+      "webhookPath": "/webhooks/whatsapp"
+    },
+    "telegram": {
+      "enabled": true,
+      "webhookPath": "/webhooks/telegram"
+    }
+  },
+  "memory": {
+    "baseDir": "./memory",
+    "layers": {
+      "raw": "./memory/raw",
+      "daily": "./memory/daily",
+      "facts": "./memory/facts"
+    },
+    "indexCronSchedule": "0 2 * * *",
+    "maxRawDaysRetained": 30,
+    "maxContextTokens": 4096
+  },
+  "routing": {
+    "liteThresholdTokens": 500,
+    "approvalGates": ["shell", "browser", "file_write", "external_post"]
+  }
+}
