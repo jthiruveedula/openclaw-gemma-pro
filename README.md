@@ -221,4 +221,89 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
+## Guardrails
+
+OpenClaw-Gemma-Pro ships a multi-layer safety system to prevent accidental destructive actions.
+
+### 1. Action Guardrail (`guardrails/action_guardrail.py`)
+
+Every risky side-effect — shell commands, file writes, external HTTP posts, memory wipes — is evaluated before execution. The guardrail can:
+- **Allow** — proceed
+- **Require approval** — pause and ask the user
+- **Block** — hard-stop with a reason logged
+
+Dangerous patterns (e.g. `rm -rf`, `DROP TABLE`, memory wipe) are blocked by default.
+
+### 2. Pre-commit Hook (`guardrails/pre_commit_hook.py`)
+
+Install once:
+```bash
+python guardrails/pre_commit_hook.py --install
+```
+
+Scans every staged diff for:
+| Check | Severity |
+|-------|----------|
+| Hardcoded secrets / API keys | Error (blocks commit) |
+| `rm -rf` / mass-delete patterns | Error |
+| `shell=True` / `eval` / `exec` | Warning |
+| Memory wipe patterns | Error |
+| Large files (>500 KB) | Warning |
+
+### 3. CI Guardrails (`.github/workflows/guardrails-ci.yml`)
+
+Four jobs run on every push / PR:
+
+| Job | What it does |
+|-----|-------------|
+| `lint-and-safety` | Ruff, Mypy, Bandit, Safety |
+| `guardrail-unit-tests` | pytest against `tests/test_guardrails.py` |
+| `secret-scan` | TruffleHog OSS verified-secrets scan |
+| `delete-guard` | Blocks PRs that delete >10 files or contain memory-wipe diffs |
+
+---
+
+## Multi-Agent Architecture
+
+OpenClaw-Gemma-Pro runs a **DAG-based parallel agent framework**:
+
+```
+User goal
+    |
+    v
+AgentCoordinator  (workers/orchestrator/coordinator.py)
+    |
+    +-- PlannerAgent   --> decomposes goal into subtasks (JSON plan via Gemma)
+    |
+    +-- ExecutorAgents --> run subtasks in parallel (asyncio + semaphore)
+    |       each guarded by ActionGuardrail before any side-effect
+    |
+    +-- MemoryAgent    --> persists results to 3-tier store
+    |       raw/YYYY-MM-DD.jsonl | daily/YYYY-MM-DD.md | facts/index.jsonl
+    |
+    +-- CriticAgent    --> reviews outputs, returns pass/warn/fail verdict
+```
+
+### Running the coordinator
+
+```bash
+python -m workers.orchestrator.coordinator "Summarise today's Telegram messages and index memory"
+```
+
+### Agent summary
+
+| Agent | File | Role |
+|-------|------|------|
+| PlannerAgent | `workers/agents/planner_agent.py` | Decomposes goal → ordered subtasks via Gemma |
+| ExecutorAgent | `workers/agents/executor_agent.py` | Runs instructions, shells, file writes (guardrail-gated) |
+| MemoryAgent | `workers/agents/memory_agent.py` | 3-tier memory: raw logs, daily summary, durable facts |
+| CriticAgent | `workers/agents/critic_agent.py` | Quality review: scores output, flags issues |
+
+### Parallelism
+
+- Up to **4 executor slots** run concurrently (configurable via `MAX_PARALLEL`).
+- Tasks with `depends_on` references are held until dependencies complete.
+- All parallel tasks share a single `ActionGuardrail` instance to serialise risky checks.
+
+
 *Built by [@jthiruveedula](https://github.com/jthiruveedula)*
