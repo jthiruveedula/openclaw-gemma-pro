@@ -1,0 +1,8 @@
+# Ruff configuration for openclaw-gemma-pro
+# Line length set to 120 to accommodate existing codebase patterns
+line-length = 120
+
+[lint]
+select = ["E", "W", "F", "B", "S"]
+ignore = ["S101", "S603"]
+
