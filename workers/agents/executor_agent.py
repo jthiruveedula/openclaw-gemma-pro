@@ -73,7 +73,7 @@ class ExecutorAgent:
         logger.warning("[executor] Shell blocked: %s | reason: %s", cmd, check.reason)
         return f"BLOCKED: {check.reason}"
       logger.info("[executor] Running shell: %s", cmd)
-      proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)  # noqa: S602
+      proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)  # noqa: S602  # nosec B602
       return proc.stdout or proc.stderr
 
     if text.startswith("WRITE_FILE:"):
