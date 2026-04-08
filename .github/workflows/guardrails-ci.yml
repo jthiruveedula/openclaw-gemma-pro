@@ -55,8 +55,9 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-asyncio
 
       - name: Run guardrail tests
+        # NOTE: || true removed intentionally - CI must fail on broken tests (P1 hardening)
         run: |
-          pytest tests/test_guardrails.py -v --tb=short || true
+          pytest tests/ -v --tb=short
 
   secret-scan:
     name: Secret / credential scan
