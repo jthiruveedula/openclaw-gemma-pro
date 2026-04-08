@@ -57,7 +57,7 @@ class AgentCoordinator:
 
     def __init__(self, config: Dict[str, Any] | None = None):
         self.config = config or {}
-        self.guardrail = ActionGuardrail(config=self.config)
+                self.guardrail = ActionGuardrail()
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL)
         self._task_registry: Dict[str, AgentTask] = {}
 
