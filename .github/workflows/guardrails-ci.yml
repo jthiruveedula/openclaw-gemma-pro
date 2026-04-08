@@ -55,8 +55,9 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-asyncio
 
       - name: Run guardrail tests
+        # NOTE: || true removed intentionally - CI must fail on broken tests (P1 hardening)
         run: |
-          pytest tests/test_guardrails.py -v --tb=short || true
+          pytest tests/ -v --tb=short
 
   secret-scan:
     name: Secret / credential scan
@@ -67,7 +68,9 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog OSS scan
-        uses: trufflesecurity/trufflehog@main
+        # Pinned to v3.88.1 (latest stable as of 2025-06-01) to prevent supply-chain attacks
+        # Update this SHA periodically: https://github.com/trufflesecurity/trufflehog/releases
+        uses: trufflesecurity/trufflehog@v3.88.1
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -98,4 +101,3 @@ jobs:
             echo "ERROR: Detected potential memory wipe command in diff."
             exit 1
           fi
-
