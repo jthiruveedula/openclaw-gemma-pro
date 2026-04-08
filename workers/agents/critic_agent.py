@@ -2,19 +2,23 @@
 
 Outputs a structured verdict: pass / warn / fail with reasoning.
 Used as a post-execution quality gate before results are surfaced.
+
+Fix (issue #6): timeout is now read from OLLAMA_TIMEOUT env var (default 300s).
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Dict
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma3:27b"
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
+MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
 CRITIC_PROMPT = """
 You are a quality-control critic for an AI assistant called OpenClaw.
@@ -38,6 +42,7 @@ class CriticAgent:
         self.guardrail = guardrail
         self.model = self.config.get("model", MODEL)
         self.ollama_url = self.config.get("ollama_url", OLLAMA_URL)
+        self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
 
     async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         goal = payload.get("goal", "")
@@ -65,7 +70,8 @@ class CriticAgent:
             "stream": False,
             "options": {"temperature": 0.1, "num_predict": 512},
         }
-        async with httpx.AsyncClient(timeout=60) as client:
+        logger.debug("[critic] Calling Ollama with timeout=%ds", self.timeout)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(self.ollama_url, json=body)
             resp.raise_for_status()
             return resp.json().get("response", "")
@@ -86,4 +92,3 @@ class CriticAgent:
         except json.JSONDecodeError:
             logger.warning("[critic] Failed to parse verdict JSON")
             return {"verdict": "warn", "score": 50, "issues": ["Parse error"], "suggestions": []}
-
