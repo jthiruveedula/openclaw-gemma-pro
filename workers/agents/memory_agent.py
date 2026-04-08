@@ -30,7 +30,6 @@ Goal: {goal}
 Results: {results}
 """
 
-
 class MemoryAgent:
     def __init__(self, config: Dict[str, Any] | None = None, guardrail=None):
         self.config = config or {}
@@ -49,7 +48,12 @@ class MemoryAgent:
         raw_dir = self.memory_root / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
         raw_file = raw_dir / f"{today}.jsonl"
-        entry = {"run_id": run_id, "goal": goal, "results": results, "ts": datetime.now(timezone.utc).isoformat()}
+        entry = {
+            "run_id": run_id,
+            "goal": goal,
+            "results": results,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
         with raw_file.open("a") as f:
             f.write(json.dumps(entry) + "\n")
         logger.info("[memory] Appended to raw log: %s", raw_file)
@@ -82,7 +86,9 @@ class MemoryAgent:
         }
 
     async def _generate_summary(self, goal: str, results: Dict) -> str:
-        prompt = SUMMARY_PROMPT.format(goal=goal, results=json.dumps(results, default=str)[:2000])
+        prompt = SUMMARY_PROMPT.format(
+            goal=goal, results=json.dumps(results, default=str)[:2000]
+        )
         body = {
             "model": self.model,
             "prompt": prompt,
@@ -97,4 +103,3 @@ class MemoryAgent:
         except Exception as exc:  # noqa: BLE001
             logger.warning("[memory] Summary generation failed: %s", exc)
             return f"Auto-summary failed. Goal: {goal[:200]}"
-
