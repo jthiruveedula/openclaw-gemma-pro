@@ -15,7 +15,7 @@ import importlib
 import os
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import List
@@ -28,16 +28,23 @@ _USE_COLOUR = sys.stdout.isatty() or os.getenv("FORCE_COLOR")
 def _c(text: str, code: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _USE_COLOUR else text
 
-GREEN = lambda t: _c(t, "0;32")
-YELLOW = lambda t: _c(t, "1;33")
-RED = lambda t: _c(t, "0;31")
-BOLD = lambda t: _c(t, "1")
+def GREEN(t: str) -> str:  # noqa: N802
+    return _c(t, "0;32")
+
+def YELLOW(t: str) -> str:  # noqa: N802
+    return _c(t, "1;33")
+
+def RED(t: str) -> str:  # noqa: N802
+    return _c(t, "0;31")
+
+def BOLD(t: str) -> str:  # noqa: N802
+    return _c(t, "1")
 
 # ---------------------------------------------------------------------------
 # Result types
 # ---------------------------------------------------------------------------
 class Status(str, Enum):
-    PASS = "PASS"
+    PASS = "PASS"  # noqa: S105
     WARN = "WARN"
     FAIL = "FAIL"
 
