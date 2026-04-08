@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from guardrails.action_guardrail import ActionGuardrail
+from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail
 
 logger = logging.getLogger(__name__)
 
