@@ -1,6 +1,9 @@
-# 🦈 openclaw-gemma-pro
-
+# 🤖 OpenClaw-Gemma-Pro
 > **Self-hosted GenAI Pro stack** — Gemma 4 via Ollama + OpenClaw + WhatsApp/Telegram + daily memory indexing for persistent cross-channel context.
+>
+> [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
+[![Gemma](https://img.shields.io/badge/Gemma-2-green)](https://ollama.com)
 
 [![OS](https://img.shields.io/badge/OS-%F0%9F%8D%8E%20Mac%20%7C%20%F0%9F%90%A7%20Linux%20%7C%20%F0%9F%AA%9F%20Windows-0078d7.svg)](#-installation) [![Model](https://img.shields.io/badge/LLM-Gemma%204%20via%20Ollama-FF6600.svg)](https://ollama.com/) [![Memory](https://img.shields.io/badge/Memory-3--Tier%20Indexed-22c55e.svg)](#multi-agent-architecture) [![Guardrails](https://img.shields.io/badge/Safety-Guardrails%20ON-dc2626.svg)](#guardrails) [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://python.org)
 
