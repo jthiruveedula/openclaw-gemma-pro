@@ -3,7 +3,7 @@
 >
 > [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
-[![Gemma](https://img.shields.io/badge/Gemma-2-green)](https://ollama.com)
+[![Gemma](https://img.shields.io/badge/Gemma-4-green)](https://ollama.com)
 
 [![OS](https://img.shields.io/badge/OS-%F0%9F%8D%8E%20Mac%20%7C%20%F0%9F%90%A7%20Linux%20%7C%20%F0%9F%AA%9F%20Windows-0078d7.svg)](#-installation) [![Model](https://img.shields.io/badge/LLM-Gemma%204%20via%20Ollama-FF6600.svg)](https://ollama.com/) [![Memory](https://img.shields.io/badge/Memory-3--Tier%20Indexed-22c55e.svg)](#multi-agent-architecture) [![Guardrails](https://img.shields.io/badge/Safety-Guardrails%20ON-dc2626.svg)](#guardrails) [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://python.org)
 
@@ -27,7 +27,7 @@ No cloud API key required. Runs entirely on your laptop or server.
                           +--------------+--------------+
                           |                             |
                     LITE tier                      PRO tier
-                    gemma2:9b                      gemma2:27b
+                    gemma4:4b                      gemma4:27b
                   (fast, cheap)                (smart, thorough)
                           |                             |
                           +--------------+--------------+
@@ -58,20 +58,23 @@ Pick your operating system:
 brew install ollama
 # OR download the .app from https://ollama.com/download/mac
 
-# Step 2 – Pull Gemma model
-ollama pull gemma2:27b        # PRO tier (16 GB RAM+)
-# ollama pull gemma2:9b       # LITE tier (8 GB RAM)
+# Step 2 – Pull Gemma 4 model
+ollama pull gemma4:27b        # PRO tier (16 GB RAM+)
+# ollama pull gemma4:4b       # LITE tier (8 GB RAM)
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
 cd openclaw-gemma-pro
 bash scripts/bootstrap.sh
 
-# Step 4 – Copy env and start
+# Step 4 – Copy env and start the multi-agent coordinator
 cp .env.example .env
-# Edit .env with your Telegram/WhatsApp tokens
-python -m uvicorn app.main:app --reload
+# Edit .env with your Telegram/WhatsApp tokens (see REQUIRED fields)
+python -m workers.orchestrator.coordinator "ping"
 ```
+
+> **Note:** There is no `app.main` entrypoint — the system is invoked via the orchestrator directly
+> or via the webhook server (coming soon). Use `python -m workers.orchestrator.coordinator` to run tasks.
 
 ---
 
@@ -83,9 +86,9 @@ curl -fsSL https://ollama.com/install.sh | sh
 sudo systemctl enable ollama
 sudo systemctl start ollama
 
-# Step 2 – Pull Gemma model
-ollama pull gemma2:27b        # PRO tier
-# ollama pull gemma2:9b       # LITE tier
+# Step 2 – Pull Gemma 4 model
+ollama pull gemma4:27b        # PRO tier
+# ollama pull gemma4:4b       # LITE tier
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
@@ -94,8 +97,8 @@ bash scripts/bootstrap.sh
 
 # Step 4 – Configure & run
 cp .env.example .env
-nano .env  # Add your bot tokens
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+nano .env  # Add your bot tokens (see REQUIRED fields)
+python -m workers.orchestrator.coordinator "ping"
 ```
 
 ---
@@ -107,8 +110,8 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 # Download from: https://ollama.com/download/windows
 # Run OllamaSetup.exe, then open a NEW terminal
 
-# Step 2 – Pull Gemma model
-ollama pull gemma2:27b
+# Step 2 – Pull Gemma 4 model
+ollama pull gemma4:27b
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
@@ -121,8 +124,8 @@ pip install -r requirements.txt
 
 # Step 4 – Configure & run
 copy .env.example .env
-notepad .env  # Add your bot tokens
-python -m uvicorn app.main:app --reload
+notepad .env  # Add your bot tokens (see REQUIRED fields)
+python -m workers.orchestrator.coordinator "ping"
 ```
 
 > **Windows tip:** Enable WSL2 for best performance: `wsl --install` then follow the Linux guide inside WSL.
@@ -133,9 +136,9 @@ python -m uvicorn app.main:app --reload
 
 | Tier | RAM | Disk | Model | Speed |
 |------|-----|------|-------|-------|
-| **LITE** | 8 GB | 6 GB | `gemma2:9b` | ~2 sec/reply |
-| **PRO** | 16 GB | 18 GB | `gemma2:27b` | ~5 sec/reply |
-| **PRO+GPU** | 16 GB + VRAM | 18 GB | `gemma2:27b` | <1 sec/reply |
+| **LITE** | 8 GB | 6 GB | `gemma4:4b` | ~2 sec/reply |
+| **PRO** | 16 GB | 18 GB | `gemma4:27b` | ~5 sec/reply |
+| **PRO+GPU** | 16 GB + VRAM | 18 GB | `gemma4:27b` | <1 sec/reply |
 
 ---
 
@@ -145,14 +148,14 @@ python -m uvicorn app.main:app --reload
 WhatsApp / Telegram
        |
        v
-Webhook Server (FastAPI)
+Webhook Server (FastAPI) [coming soon]
        |
        v
 [Skill: chat-router]
        |         |
        v         v
    LITE tier   PRO tier
-   gemma2:9b  gemma2:27b
+   gemma4:4b  gemma4:27b
   (Ollama :11434)
        |
        v
@@ -178,7 +181,7 @@ User Goal
     v
 AgentCoordinator  (workers/orchestrator/coordinator.py)
     |
-    +-- [1] PlannerAgent   --> calls Gemma, decomposes goal into subtasks
+    +-- [1] PlannerAgent   --> calls Gemma 4, decomposes goal into subtasks
     |
     +-- [2] ExecutorAgents --> run subtasks IN PARALLEL (asyncio + semaphore)
     |         each action checked by ActionGuardrail before execution
@@ -195,10 +198,11 @@ AgentCoordinator  (workers/orchestrator/coordinator.py)
 
 | Agent | File | What It Does |
 |-------|------|-------------|
-| 📝 PlannerAgent | `workers/agents/planner_agent.py` | Decomposes goal into 2-6 subtasks via Gemma |
+| 📝 PlannerAgent | `workers/agents/planner_agent.py` | Decomposes goal into 2-6 subtasks via Gemma 4 |
 | ⚡ ExecutorAgent | `workers/agents/executor_agent.py` | Runs each task; gates shell/file ops through guardrail |
 | 🧠 MemoryAgent | `workers/agents/memory_agent.py` | 3-tier memory: raw logs, daily summaries, durable facts |
 | 🔍 CriticAgent | `workers/agents/critic_agent.py` | Reviews outputs, flags issues, returns score |
+| ☁️ CloudFallbackProvider | `workers/agents/cloud_fallback.py` | Falls back to OpenAI/Gemini Flash when Ollama fails |
 
 ---
 
@@ -227,7 +231,7 @@ Blocked by default:
 | Job | What It Checks |
 |-----|----------------|
 | `lint-and-safety` | Ruff, Mypy, Bandit, Safety audit |
-| `secret-scan` | TruffleHog verified-secrets scan |
+| `secret-scan` | TruffleHog verified-secrets scan (pinned to v3) |
 | `delete-guard` | Blocks PRs deleting >10 files or containing memory-wipe diffs |
 
 ---
@@ -240,13 +244,16 @@ openclaw-gemma-pro/
 ├── config/               # Model routing, OpenClaw config JSON
 ├── guardrails/           # ActionGuardrail + pre-commit safety hook
 ├── scripts/
-│   └── bootstrap.sh      # One-shot setup for all platforms
+│   ├── bootstrap.sh      # One-shot setup for all platforms (macOS/Linux)
+│   ├── doctor.py         # Pre-flight environment validation
+│   └── setup_task_scheduler.ps1  # Windows cron equivalent
 ├── skills/               # Chat-router, daily-memory-indexer
 ├── workers/
-│   ├── agents/           # planner, executor, memory, critic
+│   ├── agents/           # planner, executor, memory, critic, cloud_fallback
 │   ├── memory_indexer/   # Daily memory indexing job
 │   └── orchestrator/     # AgentCoordinator (DAG runner)
-├── .env.example
+├── .env.example          # Environment template (REQUIRED/OPTIONAL annotated)
+├── CONTRIBUTING.md       # Contribution guide & secrets hygiene
 ├── requirements.txt
 └── README.md
 ```
@@ -259,18 +266,24 @@ Edit `.env` (copy from `.env.example`):
 
 ```env
 # Ollama endpoint (same for Mac/Linux/Windows)
-OLLAMA_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://localhost:11434
 
-# Model selection
-LITE_MODEL=gemma2:9b
-PRO_MODEL=gemma2:27b
+# Model selection (Gemma 4 — updated from Gemma 2)
+OLLAMA_MODEL=gemma4:27b       # PRO tier
+OLLAMA_LITE_MODEL=gemma4:4b   # LITE tier
+OLLAMA_TIMEOUT=300            # Increase for cold-start on 27b
+
+# Cloud fallback (optional)
+# CLOUD_FALLBACK_PROVIDER=gemini
+# CLOUD_FALLBACK_MODEL=gemini-2.0-flash
+# GEMINI_API_KEY=your_key_here
 
 # Messaging (optional – needed for WhatsApp/Telegram)
 TELEGRAM_BOT_TOKEN=your_token_here
-WHATSAPP_VERIFY_TOKEN=your_verify_token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+your_number_here
 
 # Memory paths
-MEMORY_ROOT=./memory
+MEMORY_BASE_DIR=./memory
 ```
 
 ---
@@ -280,6 +293,9 @@ MEMORY_ROOT=./memory
 ```bash
 # Run a one-off goal via multi-agent coordinator
 python -m workers.orchestrator.coordinator "Summarise today's Telegram messages"
+
+# Run pre-flight environment check
+python scripts/doctor.py
 
 # Index yesterday's memory manually
 python workers/memory_indexer/index_memory.py
@@ -299,6 +315,9 @@ pytest tests/ -v
 - [x] 3-tier daily memory indexing
 - [x] Action guardrails + pre-commit safety
 - [x] CI: secret scan + accidental-delete guard
+- [x] Cloud fallback provider (OpenAI / Gemini Flash)
+- [x] Pre-flight doctor script
+- [x] Windows task scheduler bootstrap
 - [ ] WhatsApp & Telegram webhook connectors
 - [ ] Multi-turn conversation memory (Firestore)
 - [ ] Desktop system-tray companion app
@@ -309,7 +328,7 @@ pytest tests/ -v
 
 ## 🤝 Contributing
 
-PRs welcome. Before opening one:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide including secrets hygiene rules.
 
 ```bash
 # Install the pre-commit hook (runs automatically on git commit)

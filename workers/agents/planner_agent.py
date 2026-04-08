@@ -1,4 +1,4 @@
-"""PlannerAgent – decomposes a high-level goal into ordered AgentTasks.
+"""PlannerAgent - decomposes a high-level goal into ordered AgentTasks.
 
 Uses Gemma 4 via Ollama to produce a structured JSON plan.
 
@@ -51,34 +51,27 @@ class PlannerAgent:
         # Allow per-instance override; fall back to module-level env-derived value
         self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
 
-    async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        goal = payload.get("goal", "")
-        context = payload.get("context", {})
-        prompt = PLAN_PROMPT.format(goal=goal, context=json.dumps(context))
+    def __init__(
+        self,
+        ollama_url: str = OLLAMA_URL,
+        model: str = MODEL,
+        timeout: float = TIMEOUT,
+    ) -> None:
+        self.ollama_url = ollama_url
+        self.model = model
+        self.timeout = timeout
+        logger.info("PlannerAgent initialised: model=%s url=%s timeout=%s", model, ollama_url, timeout)
 
-        raw = await self._call_ollama(prompt)
-        plan = self._parse_plan(raw)
+    async def plan(self, goal: str, context: str = "") -> List[Dict[str, Any]]:
+        """Call Ollama and return a list of subtask dicts.
 
-        # Convert dicts -> AgentTask objects (imported lazily to avoid circular)
-        from workers.orchestrator.coordinator import AgentTask
-        subtasks = [
-            AgentTask(
-                name=s["name"],
-                agent_type=s.get("agent_type", "executor"),
-                payload=s.get("payload", {}),
-                depends_on=s.get("depends_on", []),
-            )
-            for s in plan.get("subtasks", [])
-        ]
-        logger.info("[planner] Produced %d subtasks for goal: %s", len(subtasks), goal[:60])
-        return {"subtasks": subtasks, "raw_plan": plan}
-
-    async def _call_ollama(self, prompt: str) -> str:
+        Returns an empty list with a logged warning if the model call fails.
+        """
+        prompt = PLAN_PROMPT.format(goal=goal, context=context)
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": 0.2, "num_predict": 1024},
         }
         logger.debug("[planner] Calling Ollama with timeout=%ds", self.timeout)
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -86,15 +79,15 @@ class PlannerAgent:
             resp.raise_for_status()
             return resp.json().get("response", "")
 
-    def _parse_plan(self, raw: str) -> Dict[str, Any]:
-        """Extract JSON from Ollama response, gracefully handling formatting."""
-        text = raw.strip()
-        # strip markdown fences if present
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            logger.warning("[planner] Failed to parse plan JSON; returning empty plan")
-            return {"subtasks": []}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(self.ollama_url, json=payload)
+                resp.raise_for_status()
+                raw = resp.json().get("response", "{}")
+                data = json.loads(raw)
+                subtasks: List[Dict[str, Any]] = data.get("subtasks", [])
+                logger.info("PlannerAgent produced %d subtasks for goal=%r", len(subtasks), goal)
+                return subtasks
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
+            logger.warning("PlannerAgent failed (%s: %s); returning empty plan.", type(exc).__name__, exc)
+            return []
