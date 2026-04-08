@@ -1,13 +1,13 @@
-# Ollama Timeout Configuration
+# Windows Bootstrap Automation
 
-This file is a placeholder for Issue #6.
+This file is a placeholder for Issue #7.
 
 ## Problem
-- Ollama timeout of 120s causes false timeouts on Gemma 4 27B cold start
-- Planner uses 60s hardcoded timeout
+- Windows bootstrap script has no cron equivalent for memory indexer
+- README overstates automation parity between Linux and Windows
 
 ## TODO
-- Increase timeout values to accommodate cold start scenarios
-- Make timeout values configurable
-- Add logging for timeout events
-- Test with Gemma 4 27B model cold starts
+- Implement Windows Task Scheduler equivalent for memory indexer
+- Add Windows-specific automation setup instructions
+- Update README to accurately reflect platform differences
+- Create PowerShell scripts for automated memory indexing on Windows
