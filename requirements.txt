@@ -1,30 +1,60 @@
-# Core HTTP client for Ollama API calls
-httpx>=0.27.0
+# ====================================================================
+# OpenClaw-Gemma-Pro Dependencies
+# All versions are pinned for reproducible builds
+# Run: pip install -r requirements.txt
+# ====================================================================
 
-# Telegram bot integration
-python-telegram-bot>=21.0
+# ====================================================================
+# Core HTTP & API Client
+# ====================================================================
+# Modern async HTTP client for Ollama API calls
+httpx==0.27.2
 
-# WhatsApp via Twilio or Meta Cloud API
-twilio>=9.0.0
+# ====================================================================
+# Messaging Platform Integrations
+# ====================================================================
+# Telegram Bot API wrapper with async support
+python-telegram-bot==21.6
 
-# Environment variable management
-python-dotenv>=1.0.0
+# Twilio SDK for WhatsApp/SMS integration via Meta Cloud API
+twilio==9.3.6
 
-# Scheduling for standalone cron-style runs
-apscheduler>=3.10.0
+# ====================================================================
+# Configuration & Environment
+# ====================================================================
+# Load environment variables from .env files
+python-dotenv==1.0.1
 
-# Audio transcription (for voice notes)
-# Uncomment if you want local Whisper support:
-# openai-whisper>=20231117
+# ====================================================================
+# Task Scheduling
+# ====================================================================
+# Advanced Python Scheduler for cron-style background tasks
+apscheduler==3.10.4
 
-# Optional: FastAPI webhook server
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
+# ====================================================================
+# Web Framework (Optional: Webhook Server)
+# ====================================================================
+# FastAPI - Modern, fast web framework for building APIs
+fastapi==0.115.4
 
-# Optional: Vector store for semantic memory search
-# chromadb>=0.5.0
+# Uvicorn ASGI server with performance optimizations
+# [standard] includes uvloop, httptools, websockets
+uvicorn[standard]==0.32.0
 
-# Dev/test dependencies
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+# ====================================================================
+# Vector Database (Optional: Semantic Memory)
+# ====================================================================
+# ChromaDB - Embedding database for semantic search and memory
+chromadb==0.5.20
 
+# ====================================================================
+# Development & Testing
+# ====================================================================
+# pytest - Testing framework
+pytest==8.3.4
+
+# pytest plugin for async test support
+pytest-asyncio==0.24.0
+
+# Code coverage measurement
+pytest-cov==6.0.0
