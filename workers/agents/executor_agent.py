@@ -15,7 +15,7 @@ from typing import Any, Dict
 
 import httpx
 
-from guardrails.action_guardrail import ActionGuardrail, ActionType
+from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail, ActionCategory as ActionType
 
 logger = logging.getLogger(__name__)
 
