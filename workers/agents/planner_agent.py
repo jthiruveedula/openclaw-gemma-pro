@@ -1,19 +1,26 @@
 """PlannerAgent – decomposes a high-level goal into ordered AgentTasks.
 
 Uses Gemma 4 via Ollama to produce a structured JSON plan.
+
+Fix (issue #6): timeout is now read from OLLAMA_TIMEOUT env var (default 300s)
+so that gemma4:27b cold-start on CPU-only hardware does not hit false timeouts.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma3:27b"
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
+MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+# Timeout read from env – default 300s covers gemma4:27b cold-start on CPU-only hardware.
+# See: https://github.com/jthiruveedula/openclaw-gemma-pro/issues/6
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
 PLAN_PROMPT = """
 You are a task planner for an AI assistant called OpenClaw.
@@ -41,6 +48,8 @@ class PlannerAgent:
         self.guardrail = guardrail
         self.model = self.config.get("model", MODEL)
         self.ollama_url = self.config.get("ollama_url", OLLAMA_URL)
+        # Allow per-instance override; fall back to module-level env-derived value
+        self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
 
     async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         goal = payload.get("goal", "")
@@ -71,7 +80,8 @@ class PlannerAgent:
             "stream": False,
             "options": {"temperature": 0.2, "num_predict": 1024},
         }
-        async with httpx.AsyncClient(timeout=60) as client:
+        logger.debug("[planner] Calling Ollama with timeout=%ds", self.timeout)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(self.ollama_url, json=payload)
             resp.raise_for_status()
             return resp.json().get("response", "")
@@ -88,4 +98,3 @@ class PlannerAgent:
         except json.JSONDecodeError:
             logger.warning("[planner] Failed to parse plan JSON; returning empty plan")
             return {"subtasks": []}
-
