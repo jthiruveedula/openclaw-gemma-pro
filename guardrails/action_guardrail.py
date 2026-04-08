@@ -23,7 +23,6 @@ Protected action categories
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -46,7 +45,6 @@ DRY_RUN = os.getenv("GUARDRAIL_DRY_RUN", "false").lower() == "true"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("guardrail")
 
-
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -59,12 +57,10 @@ class ActionCategory(str, Enum):
     MULTI = "MULTI"
     SAFE = "SAFE"
 
-
 class GuardrailDecision(str, Enum):
     ALLOW = "ALLOW"
     PENDING = "PENDING"   # blocked, awaiting confirmation
     BLOCKED = "BLOCKED"   # hard block, no confirmation possible
-
 
 @dataclass
 class ActionContext:
@@ -75,8 +71,9 @@ class ActionContext:
     channel: str = "unknown"
     user_id: str = "unknown"
     item_count: int = 1       # for bulk operations
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
 @dataclass
 class GuardrailResult:
@@ -85,7 +82,6 @@ class GuardrailResult:
     reason: str
     confirmation_token: str | None = None
     action_ctx: ActionContext | None = None
-
 
 # ---------------------------------------------------------------------------
 # Pattern matchers
@@ -125,7 +121,6 @@ _ACTION_TYPE_MAP: dict[str, ActionCategory] = {
     "facts_clear": ActionCategory.MEMORY,
 }
 
-
 # ---------------------------------------------------------------------------
 # Pending confirmation store (in-memory; swap for Redis in prod)
 # ---------------------------------------------------------------------------
@@ -152,14 +147,17 @@ class _PendingStore:
                 for t, c in self._store.items()
             ]
 
-
 _PENDING = _PendingStore()
-
 
 # ---------------------------------------------------------------------------
 # Audit logger
 # ---------------------------------------------------------------------------
-def _audit(decision: GuardrailDecision, category: ActionCategory, ctx: ActionContext, reason: str):
+def _audit(
+    decision: GuardrailDecision,
+    category: ActionCategory,
+    ctx: ActionContext,
+    reason: str,
+):
     AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -178,7 +176,6 @@ def _audit(decision: GuardrailDecision, category: ActionCategory, ctx: ActionCon
     log_fn = logger.warning if decision != GuardrailDecision.ALLOW else logger.debug
     log_fn("[GUARDRAIL] %s | %s | %s -> %s | %s",
             decision.value, category.value, ctx.agent_id, ctx.action_type, reason)
-
 
 # ---------------------------------------------------------------------------
 # Core engine
@@ -218,7 +215,10 @@ class GuardrailEngine:
             return GuardrailResult(
                 decision=GuardrailDecision.BLOCKED,
                 category=ActionCategory.DELETE,
-                reason=f"'{ctx.action_type}' is permanently blocked. Requires manual intervention.",
+                reason=(
+                    f"'{ctx.action_type}' is permanently blocked."
+                    " Requires manual intervention."
+                ),
             )
 
         # 2. Classify category
@@ -226,7 +226,10 @@ class GuardrailEngine:
 
         # 3. Bulk threshold check
         if ctx.item_count > BULK_THRESHOLD and category != ActionCategory.SAFE:
-            reason = f"Bulk operation: {ctx.item_count} items exceeds threshold {BULK_THRESHOLD}"
+            reason = (
+                f"Bulk operation: {ctx.item_count} items"
+                f" exceeds threshold {BULK_THRESHOLD}"
+            )
             token = _PENDING.put(ctx)
             _audit(GuardrailDecision.PENDING, ActionCategory.MULTI, ctx, reason)
             return GuardrailResult(
@@ -240,14 +243,18 @@ class GuardrailEngine:
         # 4. Safe pass-through
         if category == ActionCategory.SAFE:
             _audit(GuardrailDecision.ALLOW, category, ctx, "Safe action")
-            return GuardrailResult(decision=GuardrailDecision.ALLOW, category=category, reason="Safe")
+            return GuardrailResult(
+                decision=GuardrailDecision.ALLOW, category=category, reason="Safe"
+            )
 
         # 5. Destructive — require confirmation
         reason = f"Destructive category: {category.value} on target '{ctx.target}'"
         if DRY_RUN:
             reason += " [DRY RUN - would be PENDING]"
             _audit(GuardrailDecision.ALLOW, category, ctx, reason)
-            return GuardrailResult(decision=GuardrailDecision.ALLOW, category=category, reason=reason)
+            return GuardrailResult(
+                decision=GuardrailDecision.ALLOW, category=category, reason=reason
+            )
 
         token = _PENDING.put(ctx)
         _audit(GuardrailDecision.PENDING, category, ctx, reason)
@@ -263,7 +270,10 @@ class GuardrailEngine:
         """Release a pending action after user confirmation."""
         ctx = _PENDING.pop(token)
         if ctx is None:
-            raise ValueError(f"No pending action for token '{token}' (expired or already confirmed)")
+            raise ValueError(
+                f"No pending action for token '{token}'"
+                " (expired or already confirmed)"
+            )
         category = self._classify(ctx)
         _audit(GuardrailDecision.ALLOW, category, ctx, f"Confirmed by token {token[:8]}...")
         logger.info("[GUARDRAIL] CONFIRMED token=%s action=%s target=%s",
@@ -295,12 +305,10 @@ class GuardrailEngine:
 
         return ActionCategory.SAFE
 
-
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------
 guardrail = GuardrailEngine()
-
 
 # ---------------------------------------------------------------------------
 # Decorator for easy wrapping
@@ -333,4 +341,3 @@ def protected(action_type: str, get_target: Callable = lambda kwargs: str(kwargs
             )
         return wrapper
     return decorator
-
