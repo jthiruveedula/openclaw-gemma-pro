@@ -1,309 +1,323 @@
-# openclaw-gemma-pro
+# 🦈 openclaw-gemma-pro
 
 > **Self-hosted GenAI Pro stack** — Gemma 4 via Ollama + OpenClaw + WhatsApp/Telegram + daily memory indexing for persistent cross-channel context.
 
-Run a production-quality personal AI assistant for near-zero recurring cost. No cloud API needed for routine use.
+[![OS](https://img.shields.io/badge/OS-%F0%9F%8D%8E%20Mac%20%7C%20%F0%9F%90%A7%20Linux%20%7C%20%F0%9F%AA%9F%20Windows-0078d7.svg)](#-installation) [![Model](https://img.shields.io/badge/LLM-Gemma%204%20via%20Ollama-FF6600.svg)](https://ollama.com/) [![Memory](https://img.shields.io/badge/Memory-3--Tier%20Indexed-22c55e.svg)](#multi-agent-architecture) [![Guardrails](https://img.shields.io/badge/Safety-Guardrails%20ON-dc2626.svg)](#guardrails) [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://python.org)
+
+Run a **production-quality personal AI assistant** for near-zero recurring cost.  
+No cloud API key required. Runs entirely on your laptop or server.
 
 ---
 
-## Architecture
+## 📺 What It Looks Like
 
 ```
-WhatsApp / Telegram
-        |
-        v
-  Webhook Server (FastAPI)
-        |
-        v
-  [Skill: chat-router]
-    |           |
-    v           v
-  LITE tier   PRO tier
-  gemma4:4b   gemma4:27b
-  (via Ollama native endpoint)
-        |
-        v
-  Memory Context Injection
-  (daily summary + facts)
-        |
-        v
-     Response
-        |
-        v
-  Raw log -> memory/raw/
-        |
-  [Cron 2AM]
-        v
-  [Worker: memory_indexer]
-    - Daily summary
-    - Fact extraction
-    - Prune old raw logs
+ +-------------------------+
+ |  You (WhatsApp/Telegram) |
+ +-----------+-------------+
+             |
+             v
+ +-------------------------+     +------------------+
+ |  FastAPI Webhook Server  +---->+  Skill Router    |
+ +-------------------------+     +--------+---------+
+                                          |
+                          +--------------+--------------+
+                          |                             |
+                    LITE tier                      PRO tier
+                    gemma2:9b                      gemma2:27b
+                  (fast, cheap)                (smart, thorough)
+                          |                             |
+                          +--------------+--------------+
+                                          |
+                                          v
+                              +---------------------+
+                              |  Memory Injector     |
+                              |  daily summary       |
+                              |  + durable facts     |
+                              +---------------------+
+                                          |
+                                          v
+                              +---------------------+
+                              |   Your Response      |
+                              +---------------------+
 ```
 
-## Repository Structure
+---
 
-```
-openclaw-gemma-pro/
-├── config/
-│   ├── openclaw.json              # OpenClaw agent + model + channel config
-│   └── model-routing.json         # Intent-based lite/pro routing rules
-├── scripts/
-│   └── bootstrap.sh               # One-command setup: Ollama, venv, cron
-├── skills/
-│   ├── chat-router/
-│   │   └── SKILL.md               # Message routing + memory injection skill
-│   └── daily-memory-indexer/
-│       └── SKILL.md               # Nightly memory indexing skill
-├── workers/
-│   └── memory_indexer/
-│       └── index_memory.py        # Python worker: summarize + fact extract
-├── .env.example                   # Environment variable template
-├── requirements.txt               # Python dependencies
-├── .gitignore
-├── LICENSE                        # MIT
-└── README.md
-```
+## ⚡ Installation
 
-## Quick Start
+Pick your operating system:
 
-### Prerequisites
-- Linux or macOS (Windows via WSL2)
-- Python 3.11+
-- 16GB+ RAM recommended (27B model)
-- ~20GB free disk (for model weights)
-
-### 1. Clone and bootstrap
+### 🍎 macOS
 
 ```bash
+# Step 1 – Install Ollama (native Mac app)
+brew install ollama
+# OR download the .app from https://ollama.com/download/mac
+
+# Step 2 – Pull Gemma model
+ollama pull gemma2:27b        # PRO tier (16 GB RAM+)
+# ollama pull gemma2:9b       # LITE tier (8 GB RAM)
+
+# Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
 cd openclaw-gemma-pro
 bash scripts/bootstrap.sh
-```
 
-This will:
-- Install Ollama (if missing)
-- Pull `gemma4:27b` (pro) and `gemma4:4b` (lite)
-- Create a Python `.venv` and install all deps
-- Copy `.env.example` → `.env`
-- Create `memory/` directory structure
-- Set up nightly cron job for memory indexer
-
-### 2. Configure environment
-
-```bash
-vim .env  # or nano .env
-```
-
-Fill in:
-- `TELEGRAM_BOT_TOKEN` — from @BotFather
-- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` — for WhatsApp via Twilio
-- `WEBHOOK_BASE_URL` — your public server URL
-
-### 3. Test Ollama locally
-
-```bash
-ollama run gemma4:27b "What can you help me with?"
-```
-
-### 4. Test memory indexer (dry run)
-
-```bash
-.venv/bin/python workers/memory_indexer/index_memory.py --dry-run
-```
-
-### 5. Start webhook server
-
-```bash
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Step 4 – Copy env and start
+cp .env.example .env
+# Edit .env with your Telegram/WhatsApp tokens
+python -m uvicorn app.main:app --reload
 ```
 
 ---
 
-## Model Tiers
-
-| Tier | Model | Use Cases | Cost |
-|------|-------|-----------|------|
-| **Lite** | `gemma4:4b` | Greet, chitchat, rewrites, short summaries | ~0 (local) |
-| **Pro** | `gemma4:27b` | Code, planning, analysis, memory synthesis | ~0 (local) |
-| **Cloud fallback** | `gpt-4o` | Only on Ollama errors (disabled by default) | Pay-per-use |
-
-Routing is intent-based — see `config/model-routing.json`. Messages >500 tokens always go to Pro.
-
-## Memory System
-
-Three-layer memory prevents stale context without stuffing the full history into every prompt:
-
-| Layer | Location | Contents |
-|-------|----------|----------|
-| **Raw** | `memory/raw/{channel}/{user}/{date}.jsonl` | All messages, one JSON per line |
-| **Daily** | `memory/daily/{date}.json` | LLM-generated summary + active tasks |
-| **Facts** | `memory/facts/master_facts.json` | Durable upserted fact store |
-
-The `daily-memory-indexer` worker runs at 2 AM, reads raw logs, calls Gemma 4 Pro, and writes structured summaries. The `chat-router` skill injects today's summary + relevant facts into every live prompt (capped at `MAX_CONTEXT_TOKENS`).
-
-## Cross-Channel Identity
-
-Users are identified across channels via a unified profile:
-```
-whatsapp::+1234567890  ]
-                        ]--> user profile --> shared memory
-telegram::username123  ]
-```
-
-Configure identity mappings in `config/openclaw.json` under `channels`.
-
-## Approval Gates
-
-High-risk tools require explicit user confirmation before execution:
-- `shell` — running terminal commands
-- `browser` — automated web actions
-- `file_write` — writing to local filesystem
-- `external_post` — sending emails, messages, API posts
-
-Configure in `config/openclaw.json` → `routing.approvalGates`.
-
-## Environment Variables
-
-See `.env.example` for all available options. Key variables:
+### 🐧 Linux
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434   # Native Ollama endpoint (NOT /v1)
-OLLAMA_MODEL=gemma4:27b
-OLLAMA_LITE_MODEL=gemma4:4b
-MEMORY_BASE_DIR=./memory
-MAX_RAW_DAYS=30
-TELEGRAM_BOT_TOKEN=...
-TWILIO_ACCOUNT_SID=...
-TWILIO_AUTH_TOKEN=...
+# Step 1 – Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable ollama
+sudo systemctl start ollama
+
+# Step 2 – Pull Gemma model
+ollama pull gemma2:27b        # PRO tier
+# ollama pull gemma2:9b       # LITE tier
+
+# Step 3 – Clone & bootstrap
+git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
+cd openclaw-gemma-pro
+bash scripts/bootstrap.sh
+
+# Step 4 – Configure & run
+cp .env.example .env
+nano .env  # Add your bot tokens
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-
-> **Important**: Use the native Ollama base URL `http://localhost:11434` — NOT the OpenAI-compatible `/v1` path, as this breaks tool-calling with Gemma 4.
-
-## Memory Indexer Worker
-
-Manual run options:
-
-```bash
-# Index yesterday (default)
-.venv/bin/python workers/memory_indexer/index_memory.py
-
-# Index a specific date
-.venv/bin/python workers/memory_indexer/index_memory.py --date 2026-04-06
-
-# Dry run (no Ollama call)
-.venv/bin/python workers/memory_indexer/index_memory.py --dry-run
-```
-
-Cron (auto-configured by bootstrap.sh):
-```
-0 2 * * * /path/to/.venv/bin/python /path/to/workers/memory_indexer/index_memory.py
-```
-
-## Roadmap
-
-- [ ] FastAPI webhook server (`app/main.py`) for Telegram + WhatsApp
-- [ ] Cross-channel identity mapper
-- [ ] Voice note transcription via Whisper
-- [ ] Screenshot/image analysis skill
-- [ ] Personal daily briefing skill (morning summary via Telegram)
-- [ ] Repo watcher skill (GitHub PR summaries)
-- [ ] ChromaDB semantic memory search
-- [ ] Docker Compose setup
-- [ ] GitHub Actions CI (lint, test)
-
-## Contributing
-
-PRs welcome. Keep skills self-contained under `skills/`, workers under `workers/`, and config in `config/`.
-
-## License
-
-MIT — see [LICENSE](LICENSE)
 
 ---
 
-## Guardrails
+### 🪟 Windows
 
-OpenClaw-Gemma-Pro ships a multi-layer safety system to prevent accidental destructive actions.
+```powershell
+# Step 1 – Install Ollama (Windows installer)
+# Download from: https://ollama.com/download/windows
+# Run OllamaSetup.exe, then open a NEW terminal
 
-### 1. Action Guardrail (`guardrails/action_guardrail.py`)
+# Step 2 – Pull Gemma model
+ollama pull gemma2:27b
 
-Every risky side-effect — shell commands, file writes, external HTTP posts, memory wipes — is evaluated before execution. The guardrail can:
-- **Allow** — proceed
-- **Require approval** — pause and ask the user
-- **Block** — hard-stop with a reason logged
+# Step 3 – Clone & bootstrap
+git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
+cd openclaw-gemma-pro
 
-Dangerous patterns (e.g. `rm -rf`, `DROP TABLE`, memory wipe) are blocked by default.
+# Use Python venv (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 
-### 2. Pre-commit Hook (`guardrails/pre_commit_hook.py`)
-
-Install once:
-```bash
-python guardrails/pre_commit_hook.py --install
+# Step 4 – Configure & run
+copy .env.example .env
+notepad .env  # Add your bot tokens
+python -m uvicorn app.main:app --reload
 ```
 
-Scans every staged diff for:
-| Check | Severity |
-|-------|----------|
-| Hardcoded secrets / API keys | Error (blocks commit) |
-| `rm -rf` / mass-delete patterns | Error |
-| `shell=True` / `eval` / `exec` | Warning |
-| Memory wipe patterns | Error |
-| Large files (>500 KB) | Warning |
-
-### 3. CI Guardrails (`.github/workflows/guardrails-ci.yml`)
-
-Four jobs run on every push / PR:
-
-| Job | What it does |
-|-----|-------------|
-| `lint-and-safety` | Ruff, Mypy, Bandit, Safety |
-| `guardrail-unit-tests` | pytest against `tests/test_guardrails.py` |
-| `secret-scan` | TruffleHog OSS verified-secrets scan |
-| `delete-guard` | Blocks PRs that delete >10 files or contain memory-wipe diffs |
+> **Windows tip:** Enable WSL2 for best performance: `wsl --install` then follow the Linux guide inside WSL.
 
 ---
 
-## Multi-Agent Architecture
+## 📋 Minimum Requirements
+
+| Tier | RAM | Disk | Model | Speed |
+|------|-----|------|-------|-------|
+| **LITE** | 8 GB | 6 GB | `gemma2:9b` | ~2 sec/reply |
+| **PRO** | 16 GB | 18 GB | `gemma2:27b` | ~5 sec/reply |
+| **PRO+GPU** | 16 GB + VRAM | 18 GB | `gemma2:27b` | <1 sec/reply |
+
+---
+
+## 🏗️ Architecture
+
+```text
+WhatsApp / Telegram
+       |
+       v
+Webhook Server (FastAPI)
+       |
+       v
+[Skill: chat-router]
+       |         |
+       v         v
+   LITE tier   PRO tier
+   gemma2:9b  gemma2:27b
+  (Ollama :11434)
+       |
+       v
+Memory Context Injection
+(daily summary + durable facts)
+       |
+       v
+    Response sent back
+       |
+       v
+Appended to memory/raw/YYYY-MM-DD.jsonl
+```
+
+---
+
+## 🤖 Multi-Agent Architecture
 
 OpenClaw-Gemma-Pro runs a **DAG-based parallel agent framework**:
 
-```
-User goal
+```text
+User Goal
     |
     v
 AgentCoordinator  (workers/orchestrator/coordinator.py)
     |
-    +-- PlannerAgent   --> decomposes goal into subtasks (JSON plan via Gemma)
+    +-- [1] PlannerAgent   --> calls Gemma, decomposes goal into subtasks
     |
-    +-- ExecutorAgents --> run subtasks in parallel (asyncio + semaphore)
-    |       each guarded by ActionGuardrail before any side-effect
+    +-- [2] ExecutorAgents --> run subtasks IN PARALLEL (asyncio + semaphore)
+    |         each action checked by ActionGuardrail before execution
     |
-    +-- MemoryAgent    --> persists results to 3-tier store
-    |       raw/YYYY-MM-DD.jsonl | daily/YYYY-MM-DD.md | facts/index.jsonl
+    +-- [3] MemoryAgent    --> persists results:
+    |         raw/YYYY-MM-DD.jsonl
+    |         daily/YYYY-MM-DD.md
+    |         facts/index.jsonl
     |
-    +-- CriticAgent    --> reviews outputs, returns pass/warn/fail verdict
+    +-- [4] CriticAgent    --> scores output: pass / warn / fail
 ```
 
-### Running the coordinator
+### Agent Table
+
+| Agent | File | What It Does |
+|-------|------|-------------|
+| 📝 PlannerAgent | `workers/agents/planner_agent.py` | Decomposes goal into 2-6 subtasks via Gemma |
+| ⚡ ExecutorAgent | `workers/agents/executor_agent.py` | Runs each task; gates shell/file ops through guardrail |
+| 🧠 MemoryAgent | `workers/agents/memory_agent.py` | 3-tier memory: raw logs, daily summaries, durable facts |
+| 🔍 CriticAgent | `workers/agents/critic_agent.py` | Reviews outputs, flags issues, returns score |
+
+---
+
+## 🛡️ Guardrails
+
+A multi-layer safety net that prevents accidental destructive actions:
+
+```text
+Any risky action
+       |
+       v
+ActionGuardrail.check()
+   |
+   +-- ALLOW  --> execute
+   +-- WARN   --> log + notify user
+   +-- BLOCK  --> hard-stop, reason logged
+
+Blocked by default:
+  rm -rf, DROP TABLE, shutil.rmtree memory/,
+  shell=True with destructive patterns,
+  writes to protected config paths
+```
+
+### CI Safety Jobs
+
+| Job | What It Checks |
+|-----|----------------|
+| `lint-and-safety` | Ruff, Mypy, Bandit, Safety audit |
+| `secret-scan` | TruffleHog verified-secrets scan |
+| `delete-guard` | Blocks PRs deleting >10 files or containing memory-wipe diffs |
+
+---
+
+## 📁 Repo Structure
+
+```
+openclaw-gemma-pro/
+├── .github/workflows/    # CI: guardrails, secret-scan, delete-guard
+├── config/               # Model routing, OpenClaw config JSON
+├── guardrails/           # ActionGuardrail + pre-commit safety hook
+├── scripts/
+│   └── bootstrap.sh      # One-shot setup for all platforms
+├── skills/               # Chat-router, daily-memory-indexer
+├── workers/
+│   ├── agents/           # planner, executor, memory, critic
+│   ├── memory_indexer/   # Daily memory indexing job
+│   └── orchestrator/     # AgentCoordinator (DAG runner)
+├── .env.example
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## ⚙️ Configuration
+
+Edit `.env` (copy from `.env.example`):
+
+```env
+# Ollama endpoint (same for Mac/Linux/Windows)
+OLLAMA_URL=http://localhost:11434
+
+# Model selection
+LITE_MODEL=gemma2:9b
+PRO_MODEL=gemma2:27b
+
+# Messaging (optional – needed for WhatsApp/Telegram)
+TELEGRAM_BOT_TOKEN=your_token_here
+WHATSAPP_VERIFY_TOKEN=your_verify_token
+
+# Memory paths
+MEMORY_ROOT=./memory
+```
+
+---
+
+## 🚀 Quick Commands
 
 ```bash
-python -m workers.orchestrator.coordinator "Summarise today's Telegram messages and index memory"
+# Run a one-off goal via multi-agent coordinator
+python -m workers.orchestrator.coordinator "Summarise today's Telegram messages"
+
+# Index yesterday's memory manually
+python workers/memory_indexer/index_memory.py
+
+# Install pre-commit safety hook
+python guardrails/pre_commit_hook.py --install
+
+# Run tests
+pytest tests/ -v
 ```
 
-### Agent summary
+---
 
-| Agent | File | Role |
-|-------|------|------|
-| PlannerAgent | `workers/agents/planner_agent.py` | Decomposes goal → ordered subtasks via Gemma |
-| ExecutorAgent | `workers/agents/executor_agent.py` | Runs instructions, shells, file writes (guardrail-gated) |
-| MemoryAgent | `workers/agents/memory_agent.py` | 3-tier memory: raw logs, daily summary, durable facts |
-| CriticAgent | `workers/agents/critic_agent.py` | Quality review: scores output, flags issues |
+## 📝 Roadmap
 
-### Parallelism
+- [x] Multi-agent orchestration (Planner / Executor / Memory / Critic)
+- [x] 3-tier daily memory indexing
+- [x] Action guardrails + pre-commit safety
+- [x] CI: secret scan + accidental-delete guard
+- [ ] WhatsApp & Telegram webhook connectors
+- [ ] Multi-turn conversation memory (Firestore)
+- [ ] Desktop system-tray companion app
+- [ ] Voice input via Whisper
+- [ ] Web UI dashboard
 
-- Up to **4 executor slots** run concurrently (configurable via `MAX_PARALLEL`).
-- Tasks with `depends_on` references are held until dependencies complete.
-- All parallel tasks share a single `ActionGuardrail` instance to serialise risky checks.
+---
 
+## 🤝 Contributing
 
-*Built by [@jthiruveedula](https://github.com/jthiruveedula)*
+PRs welcome. Before opening one:
+
+```bash
+# Install the pre-commit hook (runs automatically on git commit)
+python guardrails/pre_commit_hook.py --install
+
+# Run linting manually
+ruff check . && mypy workers/ guardrails/
+```
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE)
