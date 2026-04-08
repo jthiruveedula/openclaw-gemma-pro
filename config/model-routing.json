@@ -1,0 +1,28 @@
+{
+  "_comment": "Model routing rules - assign task types to lite or pro model tier",
+  "rules": [
+    {
+      "match": { "intent": ["greet", "chitchat", "rewrite", "summarize_short"] },
+      "model": "lite",
+      "reason": "Simple low-token tasks that don't need 27B capacity"
+    },
+    {
+      "match": { "intent": ["code", "plan", "debug", "analyze", "memory_synthesis", "multi_step"] },
+      "model": "pro",
+      "reason": "Complex tasks requiring full reasoning and tool use"
+    },
+    {
+      "match": { "tokenEstimate": { "gt": 500 } },
+      "model": "pro",
+      "reason": "Long context always routes to pro"
+    }
+  ],
+  "fallback": "pro",
+  "cloudFallback": {
+    "enabled": false,
+    "provider": "openai",
+    "model": "gpt-4o",
+    "triggerOn": ["ollama_timeout", "ollama_error"],
+    "comment": "Only enable for rare hard tasks when local inference fails"
+  }
+}
