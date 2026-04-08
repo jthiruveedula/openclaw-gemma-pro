@@ -13,7 +13,8 @@ Usage:
   python index_memory.py [--date YYYY-MM-DD] [--dry-run]
 
 Cron setup (add to crontab):
-  0 2 * * * /path/to/venv/bin/python /path/to/workers/memory_indexer/index_memory.py
+  0 2 * * * /path/to/venv/bin/python \\
+      /path/to/workers/memory_indexer/index_memory.py
 """
 
 import argparse
@@ -37,7 +38,6 @@ DAILY_DIR = MEMORY_BASE / "daily"
 FACTS_DIR = MEMORY_BASE / "facts"
 MAX_RAW_DAYS = int(os.getenv("MAX_RAW_DAYS", "30"))
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,34 +83,39 @@ def build_summary_prompt(messages: list[dict], target_date: date) -> str:
         user = m.get("_user", "?")
         convo_text += f"[{channel}/{user}] {role}: {text}\n"
 
-    return f"""You are a memory indexer for a personal AI assistant.
-
-Date: {target_date.isoformat()}
-
-Below are all conversations from today across WhatsApp, Telegram, and other channels.
-
-Your task:
-1. Write a 3-5 sentence DAILY SUMMARY capturing the most important topics, decisions, and actions.
-2. Extract DURABLE FACTS - preferences, ongoing projects, contact info, recurring reminders, or commitments the user mentioned.
-   Format facts as a JSON array of objects with keys: "category", "key", "value", "confidence" (high/medium/low).
-
-Respond in this exact JSON format:
-{{
-  "date": "{target_date.isoformat()}",
-  "summary": "<3-5 sentence summary here>",
-  "facts": [
-    {{"category": "<category>", "key": "<key>", "value": "<value>", "confidence": "<high|medium|low>"}}
-  ],
-  "active_tasks": ["<task1>", "<task2>"],
-  "message_count": {len(messages)}
-}}
-
---- CONVERSATIONS ---
-{convo_text[:6000]}
---- END CONVERSATIONS ---
-
-Respond with valid JSON only, no markdown fences.
-"""
+    date_iso = target_date.isoformat()
+    fact_schema = (
+        '{"category": "<category>", "key": "<key>",'
+        ' "value": "<value>", "confidence": "<high|medium|low>"}'
+    )
+    return (
+        f"You are a memory indexer for a personal AI assistant.\n\n"
+        f"Date: {date_iso}\n\n"
+        f"Below are all conversations from today across WhatsApp, "
+        f"Telegram, and other channels.\n\n"
+        f"Your task:\n"
+        f"1. Write a 3-5 sentence DAILY SUMMARY capturing the most "
+        f"important topics, decisions, and actions.\n"
+        f"2. Extract DURABLE FACTS - preferences, ongoing projects, "
+        f"contact info, recurring reminders, or commitments the user "
+        f"mentioned.\n"
+        f'   Format facts as a JSON array of objects with keys: '
+        f'"category", "key", "value", "confidence" (high/medium/low).\n\n'
+        f"Respond in this exact JSON format:\n"
+        f'{{\n'
+        f'  "date": "{date_iso}",\n'
+        f'  "summary": "<3-5 sentence summary here>",\n'
+        f'  "facts": [\n'
+        f"    {{{fact_schema}}}\n"
+        f'  ],\n'
+        f'  "active_tasks": ["<task1>", "<task2>"],\n'
+        f'  "message_count": {len(messages)}\n'
+        f"}}\n\n"
+        f"--- CONVERSATIONS ---\n"
+        f"{convo_text[:6000]}\n"
+        f"--- END CONVERSATIONS ---\n\n"
+        f"Respond with valid JSON only, no markdown fences.\n"
+    )
 
 
 def call_ollama(prompt: str) -> str:
@@ -160,7 +165,9 @@ def merge_facts(new_facts: list[dict], date_str: str) -> None:
         master = {"last_updated": "", "facts": {}}
 
     for fact in new_facts:
-        key = f"{fact.get('category', 'general')}/{fact.get('key', 'unknown')}"
+        key = (
+            f"{fact.get('category', 'general')}/{fact.get('key', 'unknown')}"
+        )
         master["facts"][key] = {
             "value": fact.get("value"),
             "confidence": fact.get("confidence", "medium"),
@@ -199,7 +206,10 @@ def prune_old_raw(cutoff_days: int) -> int:
 def run(target_date: date, dry_run: bool = False) -> None:
     ensure_dirs()
     date_str = target_date.isoformat()
-    print(f"[{datetime.now().isoformat()}] Starting memory indexing for {date_str}")
+    print(
+        f"[{datetime.now().isoformat()}] "
+        f"Starting memory indexing for {date_str}"
+    )
 
     messages = load_raw_messages(target_date)
     print(f"  Loaded {len(messages)} messages")
@@ -224,7 +234,9 @@ def run(target_date: date, dry_run: bool = False) -> None:
 
     result = parse_llm_json(raw_response)
     if not result:
-        print("  [ERROR] Failed to parse LLM JSON response", file=sys.stderr)
+        print(
+            "  [ERROR] Failed to parse LLM JSON response", file=sys.stderr
+        )
         # Save raw response for debugging
         debug_file = DAILY_DIR / f"{date_str}_raw_debug.txt"
         debug_file.write_text(raw_response)
@@ -245,13 +257,18 @@ def run(target_date: date, dry_run: bool = False) -> None:
     # Prune old raw logs
     deleted = prune_old_raw(MAX_RAW_DAYS)
     if deleted:
-        print(f"  Pruned {deleted} old raw message files (>{MAX_RAW_DAYS} days)")
+        print(
+            f"  Pruned {deleted} old raw message files "
+            f"(>{MAX_RAW_DAYS} days)"
+        )
 
     print(f"[{datetime.now().isoformat()}] Done.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Daily memory indexer for OpenClaw Pro")
+    parser = argparse.ArgumentParser(
+        description="Daily memory indexer for OpenClaw Pro"
+    )
     parser.add_argument(
         "--date",
         default=str(date.today() - timedelta(days=1)),
@@ -267,8 +284,9 @@ if __name__ == "__main__":
     try:
         target = date.fromisoformat(args.date)
     except ValueError:
-        print(f"[ERROR] Invalid date format: {args.date}", file=sys.stderr)
+        print(
+            f"[ERROR] Invalid date format: {args.date}", file=sys.stderr
+        )
         sys.exit(1)
 
     run(target, dry_run=args.dry_run)
-

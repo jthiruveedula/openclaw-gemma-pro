@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from guardrails.action_guardrail import ActionGuardrail, ActionType
+from guardrails.action_guardrail import ActionGuardrail
 
 logger = logging.getLogger(__name__)
 
@@ -65,26 +65,44 @@ class AgentCoordinator:
     # Public API
     # ------------------------------------------------------------------
 
-    async def run(self, goal: str, context: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    async def run(
+        self, goal: str, context: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
         """High-level entry: decompose goal, execute in parallel, review."""
         ctx = context or {}
         run_id = str(uuid.uuid4())[:8]
-        logger.info("[coordinator] Starting run %s | goal: %s", run_id, goal[:80])
+        logger.info(
+            "[coordinator] Starting run %s | goal: %s", run_id, goal[:80]
+        )
 
         # 1. Plan
-        plan_task = AgentTask(name="plan", agent_type="planner", payload={"goal": goal, "context": ctx})
+        plan_task = AgentTask(
+            name="plan",
+            agent_type="planner",
+            payload={"goal": goal, "context": ctx},
+        )
         await self._execute_task(plan_task)
         if plan_task.status != TaskStatus.COMPLETED:
-            return {"run_id": run_id, "status": "failed", "error": plan_task.error}
+            return {
+                "run_id": run_id,
+                "status": "failed",
+                "error": plan_task.error,
+            }
 
         subtasks: List[AgentTask] = plan_task.result.get("subtasks", [])
-        logger.info("[coordinator] Plan produced %d subtask(s)", len(subtasks))
+        logger.info(
+            "[coordinator] Plan produced %d subtask(s)", len(subtasks)
+        )
 
         # 2. Execute subtasks respecting dependencies
         await self._execute_dag(subtasks)
 
         # 3. Persist memory
-        results = {t.task_id: t.result for t in subtasks if t.status == TaskStatus.COMPLETED}
+        results = {
+            t.task_id: t.result
+            for t in subtasks
+            if t.status == TaskStatus.COMPLETED
+        }
         mem_task = AgentTask(
             name="persist_memory",
             agent_type="memory",
@@ -100,12 +118,18 @@ class AgentCoordinator:
         )
         await self._execute_task(critic_task)
 
+        subtasks_ok = sum(
+            1 for t in subtasks if t.status == TaskStatus.COMPLETED
+        )
+        subtasks_failed = sum(
+            1 for t in subtasks if t.status == TaskStatus.FAILED
+        )
         summary = {
             "run_id": run_id,
             "status": "completed",
             "subtasks_total": len(subtasks),
-            "subtasks_ok": sum(1 for t in subtasks if t.status == TaskStatus.COMPLETED),
-            "subtasks_failed": sum(1 for t in subtasks if t.status == TaskStatus.FAILED),
+            "subtasks_ok": subtasks_ok,
+            "subtasks_failed": subtasks_failed,
             "critic_verdict": critic_task.result,
             "memory_saved": mem_task.status == TaskStatus.COMPLETED,
         }
@@ -129,10 +153,14 @@ class AgentCoordinator:
             ]
             if not ready:
                 # circular dep or permanently blocked — break
-                logger.warning("[coordinator] No ready tasks; breaking DAG loop")
+                logger.warning(
+                    "[coordinator] No ready tasks; breaking DAG loop"
+                )
                 break
 
-            await asyncio.gather(*[self._run_with_semaphore(t) for t in ready])
+            await asyncio.gather(
+                *[self._run_with_semaphore(t) for t in ready]
+            )
 
             for t in ready:
                 pending.remove(t)
@@ -154,7 +182,9 @@ class AgentCoordinator:
         except Exception as exc:  # noqa: BLE001
             task.error = str(exc)
             task.status = TaskStatus.FAILED
-            logger.error("[coordinator] Task %s failed: %s", task.name, exc)
+            logger.error(
+                "[coordinator] Task %s failed: %s", task.name, exc
+            )
         finally:
             task.finished_at = time.monotonic()
 
@@ -191,4 +221,3 @@ if __name__ == "__main__":
     coordinator = AgentCoordinator()
     result = asyncio.run(coordinator.run(goal))
     print(json.dumps(result, indent=2))
-
