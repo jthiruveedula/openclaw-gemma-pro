@@ -13,11 +13,9 @@ from __future__ import annotations
 
 import importlib
 import os
-import platform
-import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import List
@@ -27,25 +25,28 @@ from typing import List
 # ---------------------------------------------------------------------------
 _USE_COLOUR = sys.stdout.isatty() or os.getenv("FORCE_COLOR")
 
-
 def _c(text: str, code: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _USE_COLOUR else text
 
+def GREEN(t: str) -> str:  # noqa: N802
+    return _c(t, "0;32")
 
-GREEN = lambda t: _c(t, "0;32")
-YELLOW = lambda t: _c(t, "1;33")
-RED = lambda t: _c(t, "0;31")
-BOLD = lambda t: _c(t, "1")
+def YELLOW(t: str) -> str:  # noqa: N802
+    return _c(t, "1;33")
 
+def RED(t: str) -> str:  # noqa: N802
+    return _c(t, "0;31")
+
+def BOLD(t: str) -> str:  # noqa: N802
+    return _c(t, "1")
 
 # ---------------------------------------------------------------------------
 # Result types
 # ---------------------------------------------------------------------------
 class Status(str, Enum):
-    PASS = "PASS"
+    PASS = "PASS"  # noqa: S105
     WARN = "WARN"
     FAIL = "FAIL"
-
 
 @dataclass
 class CheckResult:
@@ -53,7 +54,6 @@ class CheckResult:
     status: Status
     message: str
     hint: str = ""
-
 
 # ---------------------------------------------------------------------------
 # Individual checks
@@ -69,7 +69,6 @@ def check_python_version() -> CheckResult:
         hint="Install Python >= 3.11 from https://python.org",
     )
 
-
 def check_ollama_reachable() -> CheckResult:
     try:
         import httpx  # noqa: PLC0415
@@ -80,7 +79,7 @@ def check_ollama_reachable() -> CheckResult:
         return CheckResult(
             "Ollama reachable", Status.FAIL,
             f"HTTP {resp.status_code}",
-            hint=f"Start Ollama: ollama serve",
+            hint="Start Ollama: ollama serve",
         )
     except Exception as exc:  # noqa: BLE001
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -90,17 +89,15 @@ def check_ollama_reachable() -> CheckResult:
             hint=f"Ollama not reachable at {base_url}. Run: ollama serve",
         )
 
-
 def _ollama_list() -> List[str]:
     """Return list of pulled model tags; empty list on error."""
     try:
         result = subprocess.run(
-            ["ollama", "list"], capture_output=True, text=True, timeout=10
+            ["ollama", "list"], capture_output=True, text=True, timeout=10  # noqa: S607
         )
         return result.stdout.lower().splitlines()
     except Exception:  # noqa: BLE001
         return []
-
 
 def check_pro_model_pulled() -> CheckResult:
     model = os.getenv("OLLAMA_MODEL", "gemma4:27b")
@@ -114,7 +111,6 @@ def check_pro_model_pulled() -> CheckResult:
         hint=f"Run: ollama pull {model}",
     )
 
-
 def check_lite_model_pulled() -> CheckResult:
     model = os.getenv("OLLAMA_LITE_MODEL", "gemma4:4b")
     lines = _ollama_list()
@@ -127,7 +123,6 @@ def check_lite_model_pulled() -> CheckResult:
         hint=f"Run: ollama pull {model}",
     )
 
-
 def check_env_file() -> CheckResult:
     env_path = Path(".env")
     if env_path.exists() and env_path.stat().st_size > 0:
@@ -138,7 +133,6 @@ def check_env_file() -> CheckResult:
             hint="Run: cp .env.example .env  then fill in your values",
         )
     return CheckResult(".env file", Status.FAIL, ".env is empty", hint="Fill in values in .env")
-
 
 def check_required_env_vars() -> CheckResult:
     required = ["OLLAMA_BASE_URL", "OLLAMA_MODEL", "OLLAMA_LITE_MODEL", "MEMORY_BASE_DIR"]
@@ -156,7 +150,6 @@ def check_required_env_vars() -> CheckResult:
         hint="Edit .env and set real values for these variables",
     )
 
-
 def check_memory_dirs_writable() -> CheckResult:
     base = Path(os.getenv("MEMORY_BASE_DIR", "./memory"))
     dirs = [base / "raw", base / "daily", base / "facts"]
@@ -173,7 +166,6 @@ def check_memory_dirs_writable() -> CheckResult:
         hint="Run: chmod -R u+w memory/",
     )
 
-
 def check_key_packages() -> CheckResult:
     packages = ["fastapi", "httpx", "telegram"]
     missing = [pkg for pkg in packages if importlib.util.find_spec(pkg) is None]
@@ -185,7 +177,6 @@ def check_key_packages() -> CheckResult:
         hint="Run: pip install -r requirements.txt",
     )
 
-
 # Optional / WARN-only checks
 def check_telegram_token() -> CheckResult:
     val = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -196,7 +187,6 @@ def check_telegram_token() -> CheckResult:
         "TELEGRAM_BOT_TOKEN not set",
         hint="Set TELEGRAM_BOT_TOKEN in .env to enable Telegram channel",
     )
-
 
 def check_twilio_tokens() -> CheckResult:
     sid = os.getenv("TWILIO_ACCOUNT_SID", "")
@@ -212,7 +202,6 @@ def check_twilio_tokens() -> CheckResult:
         "Twilio credentials missing or placeholder",
         hint="Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER in .env",
     )
-
 
 def check_ram() -> CheckResult:
     try:
@@ -231,7 +220,6 @@ def check_ram() -> CheckResult:
             "psutil not installed, RAM check skipped",
             hint="pip install psutil to enable RAM check",
         )
-
 
 # ---------------------------------------------------------------------------
 # Runner
@@ -254,7 +242,6 @@ WARN_CHECKS = [
     check_ram,
 ]
 
-
 def _status_label(status: Status) -> str:
     labels = {
         Status.PASS: GREEN(f"[{'PASS':^4}]"),
@@ -262,7 +249,6 @@ def _status_label(status: Status) -> str:
         Status.FAIL: RED(f"[{'FAIL':^4}]"),
     }
     return labels[status]
-
 
 def run_doctor(load_dotenv: bool = True) -> int:
     """Run all checks. Returns 0 on all-pass, 1 on any FAIL."""
@@ -280,7 +266,7 @@ def run_doctor(load_dotenv: bool = True) -> int:
 
     print()
     print(BOLD("=" * 60))
-    print(BOLD("  OpenClaw Gemma Pro – Setup Doctor"))
+    print(BOLD("  OpenClaw Gemma Pro \u2013 Setup Doctor"))
     print(BOLD("=" * 60))
     print()
 
@@ -307,7 +293,6 @@ def run_doctor(load_dotenv: bool = True) -> int:
         return 1
     print(GREEN("  All critical checks passed. You're good to go!"))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(run_doctor())

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from guardrails.action_guardrail import ActionGuardrail
+from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class AgentCoordinator:
 
     def __init__(self, config: Dict[str, Any] | None = None):
         self.config = config or {}
-        self.guardrail = ActionGuardrail(config=self.config)
+        self.guardrail = ActionGuardrail()
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL)
         self._task_registry: Dict[str, AgentTask] = {}
 
@@ -152,7 +152,7 @@ class AgentCoordinator:
                 if all(dep in completed_ids for dep in t.depends_on)
             ]
             if not ready:
-                # circular dep or permanently blocked — break
+                # circular dep or permanently blocked -- break
                 logger.warning(
                     "[coordinator] No ready tasks; breaking DAG loop"
                 )
