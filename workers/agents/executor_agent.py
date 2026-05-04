@@ -6,10 +6,11 @@ through the ActionGuardrail and blocks if the action is disallowed.
 Fix (issue #6): timeout is now read from OLLAMA_TIMEOUT env var (default 300s).
 
 Fix (PR4 of audit-tracker #36): WRITE_FILE now enforces a workspace allowlist.
-Paths must resolve inside WORKSPACE_DIR (default = MEMORY_BASE_DIR or ./workspace).
-Symlinks are followed via resolve(), and any path that lands outside the allowed
-root is rejected before the guardrail check, eliminating arbitrary-path writes
-even if the regex guardrail misses a payload.
+
+Fix (PR6 of audit-tracker #36): _call_ollama now goes through CloudFallbackProvider
+so a local Ollama outage transparently routes to the configured cloud model
+(OpenAI/Gemini) per config/model-routing.json. Falls back to direct Ollama if
+the provider cannot be constructed.
 """
 from __future__ import annotations
 
@@ -27,13 +28,17 @@ from guardrails.action_guardrail import (
     GuardrailEngine as ActionGuardrail,
 )
 
+try:
+    from workers.agents.cloud_fallback import CloudFallbackProvider
+except Exception:  # noqa: BLE001
+    CloudFallbackProvider = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
 MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
-# Allowed write root. Default: WORKSPACE_DIR -> MEMORY_BASE_DIR -> ./workspace.
 _DEFAULT_WORKSPACE = os.getenv(
     "WORKSPACE_DIR",
     os.getenv("MEMORY_BASE_DIR", "./workspace"),
@@ -54,12 +59,6 @@ Context: {context}
 
 
 def _safe_resolve(file_path: str, root: Path) -> Path | None:
-    """Resolve `file_path` and ensure it stays under `root`.
-
-    Returns the resolved Path if safe, else None. Symlinks are followed.
-    Empty paths, paths with NUL bytes, and absolute paths outside `root`
-    are rejected. Relative paths are resolved against `root`.
-    """
     if not file_path or "\x00" in file_path:
         return None
     candidate = Path(file_path)
@@ -85,6 +84,18 @@ class ExecutorAgent:
         self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
         self.workspace_root = Path(self.config.get("workspace_root", WORKSPACE_ROOT)).resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
+        self._cloud_provider = self._build_cloud_provider()
+
+    def _build_cloud_provider(self):
+        if not self.config.get("cloud_fallback", True):
+            return None
+        if CloudFallbackProvider is None:
+            return None
+        try:
+            return CloudFallbackProvider.from_config()
+        except Exception as exc:  # noqa: BLE001
+            logger.info("[executor] CloudFallbackProvider disabled: %s", exc)
+            return None
 
     async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         instruction = payload.get("instruction", "")
@@ -150,7 +161,7 @@ class ExecutorAgent:
 
         return text
 
-    async def _call_ollama(self, prompt: str) -> str:
+    async def _direct_ollama(self, prompt: str) -> str:
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -163,3 +174,14 @@ class ExecutorAgent:
             resp.raise_for_status()
             data = resp.json()
             return data.get("response", "")
+
+    async def _call_ollama(self, prompt: str) -> str:
+        if self._cloud_provider is None:
+            return await self._direct_ollama(prompt)
+        try:
+            return await self._cloud_provider.call_with_fallback(
+                self._direct_ollama(prompt), prompt
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[executor] cloud fallback wrapper failed, using direct: %s", exc)
+            return await self._direct_ollama(prompt)
