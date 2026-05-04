@@ -4,11 +4,18 @@ Tiers:
   1. raw/   – append-only JSONL per-day
   2. daily/ – LLM-generated summary per day (refreshed once/day)
   3. facts/ – durable extracted facts (never auto-deleted)
+
+Fix (PR3 of audit-tracker #36): align MemoryAgent with the other agents by
+reading OLLAMA_BASE_URL / OLLAMA_MODEL / OLLAMA_TIMEOUT / MEMORY_BASE_DIR
+from the environment. The previous version hardcoded `http://localhost:11434`
+and `gemma3:27b`, which drifted from the rest of the stack (gemma4:27b) and
+ignored OLLAMA_BASE_URL / OLLAMA_TIMEOUT entirely.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
@@ -17,9 +24,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma3:27b"
-MEMORY_ROOT = Path("memory")
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
+MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
+MEMORY_ROOT = Path(os.getenv("MEMORY_BASE_DIR", "memory"))
 
 SUMMARY_PROMPT = """
 You are the memory manager for OpenClaw.
@@ -30,12 +38,14 @@ Goal: {goal}
 Results: {results}
 """
 
+
 class MemoryAgent:
     def __init__(self, config: Dict[str, Any] | None = None, guardrail=None):
         self.config = config or {}
         self.guardrail = guardrail
         self.model = self.config.get("model", MODEL)
         self.ollama_url = self.config.get("ollama_url", OLLAMA_URL)
+        self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
         self.memory_root = Path(self.config.get("memory_root", MEMORY_ROOT))
 
     async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,7 +106,7 @@ class MemoryAgent:
             "options": {"temperature": 0.3, "num_predict": 512},
         }
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(self.ollama_url, json=body)
                 resp.raise_for_status()
                 return resp.json().get("response", "").strip()
