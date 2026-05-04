@@ -6,6 +6,12 @@ Orchestrates parallel agent execution with:
   - Memory persistence via MemoryAgent
   - Quality review via CriticAgent
   - Guardrail checks before every external action
+
+Fix (PR2 of audit-tracker #36): planner returns plain dicts, but the DAG
+execution path expects AgentTask objects (with .task_id / .depends_on /
+.status). This module now converts plan output dicts into AgentTask
+instances and explicitly marks unreachable / cyclic nodes as BLOCKED
+instead of silently dropping them.
 """
 from __future__ import annotations
 
@@ -18,6 +24,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail
+from workers.agents.planner_agent import PlannerAgent
+from workers.agents.executor_agent import ExecutorAgent
+from workers.agents.memory_agent import MemoryAgent
+from workers.agents.critic_agent import CriticAgent
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +37,7 @@ class TaskStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
-    BLOCKED = "blocked"  # blocked by guardrail
+    BLOCKED = "blocked"  # blocked by guardrail or unreachable in DAG
 
 
 @dataclass
@@ -48,6 +58,32 @@ class AgentTask:
         if self.started_at and self.finished_at:
             return round(self.finished_at - self.started_at, 3)
         return None
+
+
+_AGENT_MAP = {
+    "planner": PlannerAgent,
+    "executor": ExecutorAgent,
+    "memory": MemoryAgent,
+    "critic": CriticAgent,
+}
+
+
+def _coerce_subtasks(raw_subtasks: List[Dict[str, Any]]) -> List[AgentTask]:
+    """Convert dict subtasks (from PlannerAgent) into AgentTask objects."""
+    tasks: List[AgentTask] = []
+    for s in raw_subtasks or []:
+        if not isinstance(s, dict):
+            logger.warning("[coordinator] Skipping non-dict subtask: %r", s)
+            continue
+        tasks.append(
+            AgentTask(
+                name=str(s.get("name", "")),
+                agent_type=str(s.get("agent_type", "executor")),
+                payload=dict(s.get("payload", {}) or {}),
+                depends_on=list(s.get("depends_on", []) or []),
+            )
+        )
+    return tasks
 
 
 class AgentCoordinator:
@@ -89,7 +125,10 @@ class AgentCoordinator:
                 "error": plan_task.error,
             }
 
-        subtasks: List[AgentTask] = plan_task.result.get("subtasks", [])
+        raw_subtasks: List[Dict[str, Any]] = (
+            plan_task.result.get("subtasks", []) if isinstance(plan_task.result, dict) else []
+        )
+        subtasks: List[AgentTask] = _coerce_subtasks(raw_subtasks)
         logger.info(
             "[coordinator] Plan produced %d subtask(s)", len(subtasks)
         )
@@ -124,12 +163,16 @@ class AgentCoordinator:
         subtasks_failed = sum(
             1 for t in subtasks if t.status == TaskStatus.FAILED
         )
+        subtasks_blocked = sum(
+            1 for t in subtasks if t.status == TaskStatus.BLOCKED
+        )
         summary = {
             "run_id": run_id,
             "status": "completed",
             "subtasks_total": len(subtasks),
             "subtasks_ok": subtasks_ok,
             "subtasks_failed": subtasks_failed,
+            "subtasks_blocked": subtasks_blocked,
             "critic_verdict": critic_task.result,
             "memory_saved": mem_task.status == TaskStatus.COMPLETED,
         }
@@ -143,29 +186,32 @@ class AgentCoordinator:
     async def _execute_dag(self, tasks: List[AgentTask]) -> None:
         """Execute tasks in dependency order, parallelising where possible."""
         completed_ids: set[str] = set()
-        pending = list(tasks)
+        pending: set[int] = set(range(len(tasks)))
 
         while pending:
-            # find tasks whose deps are all satisfied
-            ready = [
-                t for t in pending
-                if all(dep in completed_ids for dep in t.depends_on)
+            ready_idx = [
+                i for i in pending
+                if all(dep in completed_ids for dep in tasks[i].depends_on)
             ]
-            if not ready:
-                # circular dep or permanently blocked -- break
+            if not ready_idx:
+                # circular dep or permanently blocked -- mark remaining BLOCKED
                 logger.warning(
-                    "[coordinator] No ready tasks; breaking DAG loop"
+                    "[coordinator] %d task(s) unreachable; marking BLOCKED",
+                    len(pending),
                 )
+                for i in pending:
+                    tasks[i].status = TaskStatus.BLOCKED
+                    tasks[i].error = "unreachable: unsatisfied dependency or cycle"
                 break
 
             await asyncio.gather(
-                *[self._run_with_semaphore(t) for t in ready]
+                *[self._run_with_semaphore(tasks[i]) for i in ready_idx]
             )
 
-            for t in ready:
-                pending.remove(t)
-                if t.status == TaskStatus.COMPLETED:
-                    completed_ids.add(t.task_id)
+            for i in ready_idx:
+                pending.discard(i)
+                if tasks[i].status == TaskStatus.COMPLETED:
+                    completed_ids.add(tasks[i].task_id)
 
     async def _run_with_semaphore(self, task: AgentTask) -> None:
         async with self._semaphore:
@@ -190,18 +236,7 @@ class AgentCoordinator:
 
     async def _dispatch(self, task: AgentTask) -> Any:
         """Route task to the correct agent module."""
-        from workers.agents.planner_agent import PlannerAgent
-        from workers.agents.executor_agent import ExecutorAgent
-        from workers.agents.memory_agent import MemoryAgent
-        from workers.agents.critic_agent import CriticAgent
-
-        agent_map = {
-            "planner": PlannerAgent,
-            "executor": ExecutorAgent,
-            "memory": MemoryAgent,
-            "critic": CriticAgent,
-        }
-        cls = agent_map.get(task.agent_type)
+        cls = _AGENT_MAP.get(task.agent_type)
         if not cls:
             raise ValueError(f"Unknown agent type: {task.agent_type}")
 
