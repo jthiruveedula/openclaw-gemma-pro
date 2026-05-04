@@ -4,6 +4,12 @@ Before any risky action (shell, file write, external post) it checks
 through the ActionGuardrail and blocks if the action is disallowed.
 
 Fix (issue #6): timeout is now read from OLLAMA_TIMEOUT env var (default 300s).
+
+Fix (PR4 of audit-tracker #36): WRITE_FILE now enforces a workspace allowlist.
+Paths must resolve inside WORKSPACE_DIR (default = MEMORY_BASE_DIR or ./workspace).
+Symlinks are followed via resolve(), and any path that lands outside the allowed
+root is rejected before the guardrail check, eliminating arbitrary-path writes
+even if the regex guardrail misses a payload.
 """
 from __future__ import annotations
 
@@ -27,6 +33,13 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/gene
 MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
+# Allowed write root. Default: WORKSPACE_DIR -> MEMORY_BASE_DIR -> ./workspace.
+_DEFAULT_WORKSPACE = os.getenv(
+    "WORKSPACE_DIR",
+    os.getenv("MEMORY_BASE_DIR", "./workspace"),
+)
+WORKSPACE_ROOT = Path(_DEFAULT_WORKSPACE).resolve()
+
 EXEC_PROMPT = """
 You are an executor agent for OpenClaw. Carry out the following instruction.
 If you need to run a shell command, output EXACTLY:
@@ -40,75 +53,113 @@ Context: {context}
 """
 
 
+def _safe_resolve(file_path: str, root: Path) -> Path | None:
+    """Resolve `file_path` and ensure it stays under `root`.
+
+    Returns the resolved Path if safe, else None. Symlinks are followed.
+    Empty paths, paths with NUL bytes, and absolute paths outside `root`
+    are rejected. Relative paths are resolved against `root`.
+    """
+    if not file_path or "\x00" in file_path:
+        return None
+    candidate = Path(file_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError):
+        return None
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None
+    return resolved
+
+
 class ExecutorAgent:
-  def __init__(self, config: Dict[str, Any] | None = None, guardrail: ActionGuardrail | None = None):
-    self.config = config or {}
-    self.guardrail = guardrail or ActionGuardrail()
-    self.model = self.config.get("model", MODEL)
-    self.ollama_url = self.config.get("ollama_url", OLLAMA_URL)
-    self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
+    def __init__(self, config: Dict[str, Any] | None = None, guardrail: ActionGuardrail | None = None):
+        self.config = config or {}
+        self.guardrail = guardrail or ActionGuardrail()
+        self.model = self.config.get("model", MODEL)
+        self.ollama_url = self.config.get("ollama_url", OLLAMA_URL)
+        self.timeout = int(self.config.get("timeout", OLLAMA_TIMEOUT))
+        self.workspace_root = Path(self.config.get("workspace_root", WORKSPACE_ROOT)).resolve()
+        self.workspace_root.mkdir(parents=True, exist_ok=True)
 
-  async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-    instruction = payload.get("instruction", "")
-    context = payload.get("context", {})
-    prompt = EXEC_PROMPT.format(instruction=instruction, context=context)
+    async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        instruction = payload.get("instruction", "")
+        context = payload.get("context", {})
+        prompt = EXEC_PROMPT.format(instruction=instruction, context=context)
 
-    raw = await self._call_ollama(prompt)
-    result = await self._handle_response(raw, instruction)
-    return {"instruction": instruction, "result": result}
+        raw = await self._call_ollama(prompt)
+        result = await self._handle_response(raw, instruction)
+        return {"instruction": instruction, "result": result}
 
-  async def _handle_response(self, raw: str, instruction: str) -> str:
-    text = raw.strip()
+    async def _handle_response(self, raw: str, instruction: str) -> str:
+        text = raw.strip()
 
-    if text.startswith("SHELL:"):
-      cmd = text[6:].strip()
-      check = self.guardrail.check(
-          ActionContext(
-              action_type="shell",
-              target=cmd,
-              payload={"command": cmd, "instruction": instruction},
-          )
-      )
-      if check.decision != GuardrailDecision.ALLOW:
-        logger.warning("[executor] Shell blocked: %s | reason: %s", cmd, check.reason)
-        return f"BLOCKED: {check.reason}"
-      logger.info("[executor] Running shell: %s", cmd)
-      proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)  # noqa: S602  # nosec B602
-      return proc.stdout or proc.stderr
+        if text.startswith("SHELL:"):
+            cmd = text[6:].strip()
+            check = self.guardrail.check(
+                ActionContext(
+                    action_type="shell",
+                    target=cmd,
+                    payload={"command": cmd, "instruction": instruction},
+                )
+            )
+            if check.decision != GuardrailDecision.ALLOW:
+                logger.warning("[executor] Shell blocked: %s | reason: %s", cmd, check.reason)
+                return f"BLOCKED: {check.reason}"
+            logger.info("[executor] Running shell: %s", cmd)
+            proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)  # noqa: S602  # nosec B602
+            return proc.stdout or proc.stderr
 
-    if text.startswith("WRITE_FILE:"):
-      rest = text[len("WRITE_FILE:"):].strip()
-      first_newline = rest.find("\n")
-      if first_newline == -1:
-        return "BLOCKED: malformed WRITE_FILE directive"
-      file_path = rest[:first_newline].strip()
-      content = rest[first_newline + 1:]
-      check = self.guardrail.check(
-          ActionContext(
-              action_type="file_write",
-              target=file_path,
-              payload={"path": file_path, "instruction": instruction},
-          )
-      )
-      if check.decision != GuardrailDecision.ALLOW:
-        logger.warning("[executor] File write blocked: %s | reason: %s", file_path, check.reason)
-        return f"BLOCKED: {check.reason}"
-      logger.info("[executor] Writing file: %s", file_path)
-      Path(file_path).write_text(content)
-      return f"Wrote {len(content)} bytes to {file_path}"
+        if text.startswith("WRITE_FILE:"):
+            rest = text[len("WRITE_FILE:"):].strip()
+            first_newline = rest.find("\n")
+            if first_newline == -1:
+                return "BLOCKED: malformed WRITE_FILE directive"
+            file_path = rest[:first_newline].strip()
+            content = rest[first_newline + 1:]
 
-    return text
+            safe_path = _safe_resolve(file_path, self.workspace_root)
+            if safe_path is None:
+                logger.warning(
+                    "[executor] WRITE_FILE rejected: %r outside workspace %s",
+                    file_path,
+                    self.workspace_root,
+                )
+                return f"BLOCKED: path {file_path!r} is outside workspace {self.workspace_root}"
 
-  async def _call_ollama(self, prompt: str) -> str:
-    payload = {
-        "model": self.model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.1, "num_predict": 2048},
-    }
-    logger.debug("[executor] Calling Ollama with timeout=%ds", self.timeout)
-    async with httpx.AsyncClient(timeout=self.timeout) as client:
-      resp = await client.post(self.ollama_url, json=payload)
-      resp.raise_for_status()
-      data = resp.json()
-      return data.get("response", "")
+            check = self.guardrail.check(
+                ActionContext(
+                    action_type="file_write",
+                    target=str(safe_path),
+                    payload={"path": str(safe_path), "instruction": instruction},
+                )
+            )
+            if check.decision != GuardrailDecision.ALLOW:
+                logger.warning(
+                    "[executor] File write blocked: %s | reason: %s", safe_path, check.reason
+                )
+                return f"BLOCKED: {check.reason}"
+            logger.info("[executor] Writing file: %s", safe_path)
+            safe_path.parent.mkdir(parents=True, exist_ok=True)
+            safe_path.write_text(content)
+            return f"Wrote {len(content)} bytes to {safe_path}"
+
+        return text
+
+    async def _call_ollama(self, prompt: str) -> str:
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.1, "num_predict": 2048},
+        }
+        logger.debug("[executor] Calling Ollama with timeout=%ds", self.timeout)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(self.ollama_url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("response", "")
