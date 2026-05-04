@@ -91,7 +91,7 @@ _DELETE_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 _OVERWRITE_PATTERNS = re.compile(
-    r"(open\(.*['\"]w['\"|overwrite_file|write_file|force.*write)",
+        r"""(open\(.*['"']w['"']|overwrite_file|write_file|force.*write)""",
     re.IGNORECASE,
 )
 _SHELL_PATTERNS = re.compile(

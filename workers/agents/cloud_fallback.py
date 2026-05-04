@@ -46,6 +46,7 @@ def _load_cloud_fallback_config() -> Dict[str, Any]:
 # Provider implementations
 # ---------------------------------------------------------------------------
 
+
 class _OpenAIProvider:
     """Calls OpenAI chat completions API."""
 
@@ -112,6 +113,7 @@ class _GeminiProvider:
 # Main CloudFallbackProvider
 # ---------------------------------------------------------------------------
 
+
 class CloudFallbackProvider:
     """Wraps an Ollama call with an optional cloud provider fallback.
 
@@ -142,6 +144,14 @@ class CloudFallbackProvider:
         enabled = os.getenv("CLOUD_FALLBACK_ENABLED", str(cfg.get("enabled", False))).lower() == "true"
         provider_name = os.getenv("CLOUD_FALLBACK_PROVIDER", cfg.get("provider", "openai"))
         model = os.getenv("CLOUD_FALLBACK_MODEL", cfg.get("model"))
+        return cls(enabled=enabled, provider_name=provider_name, model=model)
+
+    @classmethod
+    def from_env(cls) -> "CloudFallbackProvider":
+        """Build from environment variables only (no config file)."""
+        enabled = os.getenv("CLOUD_FALLBACK_ENABLED", "false").lower() == "true"
+        provider_name = os.getenv("CLOUD_FALLBACK_PROVIDER", "openai")
+        model = os.getenv("CLOUD_FALLBACK_MODEL")
         return cls(enabled=enabled, provider_name=provider_name, model=model)
 
     def _build_provider(self, name: str, model: Optional[str]) -> Any:

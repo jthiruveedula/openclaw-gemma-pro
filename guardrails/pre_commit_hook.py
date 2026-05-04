@@ -30,7 +30,6 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
-
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
@@ -39,7 +38,6 @@ class Rule(NamedTuple):
     pattern: re.Pattern
     severity: str  # ERROR | WARN
     message: str
-
 
 RULES: list[Rule] = [
     Rule(
@@ -105,7 +103,6 @@ PROTECTED_PATHS = [
 # Max file size for staged additions (bytes)
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
-
 # ---------------------------------------------------------------------------
 # Git helpers
 # ---------------------------------------------------------------------------
@@ -113,10 +110,8 @@ def _run(cmd: list[str]) -> str:
     result = subprocess.run(cmd, capture_output=True, text=True)
     return result.stdout
 
-
 def get_staged_diff() -> str:
     return _run(["git", "diff", "--cached", "--unified=0"])
-
 
 def get_staged_files() -> list[tuple[str, str]]:
     """Returns list of (status, filepath) for staged files."""
@@ -128,18 +123,16 @@ def get_staged_files() -> list[tuple[str, str]]:
             files.append((parts[0].strip(), parts[1].strip()))
     return files
 
-
 def get_file_size_staged(filepath: str) -> int:
     """Return size of staged file blob."""
     try:
         result = subprocess.run(
-            ["git", "cat-file", "-s", f":0:{filepath}"],
+            ["git", "cat-file", "-s", f":0:{filepath}"],  # noqa: S607
             capture_output=True, text=True
         )
         return int(result.stdout.strip())
     except (ValueError, Exception):
         return 0
-
 
 # ---------------------------------------------------------------------------
 # Checks
@@ -152,7 +145,6 @@ class CheckResult(NamedTuple):
     line_num: int
     line_content: str
     message: str
-
 
 def check_diff_rules(diff: str) -> list[CheckResult]:
     """Run pattern rules against added lines in the staged diff."""
@@ -188,7 +180,6 @@ def check_diff_rules(diff: str) -> list[CheckResult]:
 
     return results
 
-
 def check_protected_deletions(staged_files: list[tuple[str, str]]) -> list[CheckResult]:
     """Block deletion of protected files."""
     results = []
@@ -203,7 +194,6 @@ def check_protected_deletions(staged_files: list[tuple[str, str]]) -> list[Check
                 message=f"PROTECTED FILE DELETION BLOCKED: {filepath}",
             ))
     return results
-
 
 def check_large_files(staged_files: list[tuple[str, str]]) -> list[CheckResult]:
     """Warn on large file additions."""
@@ -222,7 +212,6 @@ def check_large_files(staged_files: list[tuple[str, str]]) -> list[CheckResult]:
                 ))
     return results
 
-
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -231,7 +220,6 @@ YELLOW = "\033[1;33m"
 GREEN = "\033[0;32m"
 RESET = "\033[0m"
 BOLD = "\033[1m"
-
 
 def run_checks() -> int:
     diff = get_staged_diff()
@@ -263,7 +251,7 @@ def run_checks() -> int:
 
     if errors:
         print(f"\n{RED}{BOLD}pre-commit BLOCKED: {len(errors)} error(s) must be resolved before committing.{RESET}")
-        print(f"Use `git commit --no-verify` to bypass (not recommended).\n")
+        print("Use `git commit --no-verify` to bypass (not recommended).\n")
         return 1
 
     if warns:
@@ -271,7 +259,6 @@ def run_checks() -> int:
 
     print(f"{GREEN}[pre-commit] All checks passed. {RESET}")
     return 0
-
 
 def install_hook():
     hook_dir = Path(".git/hooks")
@@ -286,7 +273,6 @@ def install_hook():
     print(f"{GREEN}[pre-commit] Hook installed at {hook_path}{RESET}")
     print("The hook will run automatically on every `git commit`.")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OpenClaw pre-commit safety hook")
     parser.add_argument("--install", action="store_true", help="Install hook into .git/hooks/pre-commit")
@@ -296,4 +282,3 @@ if __name__ == "__main__":
         install_hook()
     else:
         sys.exit(run_checks())
-

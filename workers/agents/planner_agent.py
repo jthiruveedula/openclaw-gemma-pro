@@ -26,16 +26,16 @@ PLAN_PROMPT = """
 You are a task planner for an AI assistant called OpenClaw.
 Given the goal below, decompose it into 2-6 atomic subtasks.
 Return ONLY a JSON object with this schema (no markdown fences):
-{
+{{
   "subtasks": [
-    {
+    {{
       "name": "<short name>",
       "agent_type": "executor",
-      "payload": {"instruction": "..."},
+      "payload": {{"instruction": "..."}},
       "depends_on": []
-    }
+    }}
   ]
-}
+}}
 
 Goal: {goal}
 Context: {context}

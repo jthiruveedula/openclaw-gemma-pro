@@ -29,7 +29,7 @@ jobs:
 
       - name: Mypy type-check (guardrails + workers)
         run: |
-          mypy guardrails/ workers/ --ignore-missing-imports --no-strict-optional
+          mypy guardrails/ workers/ --ignore-missing-imports --no-strict-optional --explicit-package-bases
 
       - name: Bandit security scan
         run: bandit -r guardrails/ workers/ -ll -x tests/
