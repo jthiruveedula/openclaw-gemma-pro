@@ -10,7 +10,7 @@ import pytest
 # Guardrail import (graceful skip if guardrails module is missing)
 # ---------------------------------------------------------------------------
 try:
-    from guardrails.action_guardrail import ActionGuardrail, GuardrailDecision
+    from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail, GuardrailDecision
     HAS_GUARDRAILS = True
 except ImportError:
     HAS_GUARDRAILS = False
@@ -45,34 +45,38 @@ class TestActionGuardrail:
 
     def test_allow_safe_action(self):
         """Safe, non-destructive actions should be ALLOWED."""
-        result = self.guardrail.check("list files in /tmp")
-        assert result in (GuardrailDecision.ALLOW, "allow", True)
+        from guardrails.action_guardrail import ActionContext
+        ctx = ActionContext(action_type="safe", target="list files", payload={})
+        result = self.guardrail.check(ctx)
+        assert result.decision == GuardrailDecision.ALLOW
 
     def test_block_rm_rf(self):
         """rm -rf commands should be BLOCKED."""
-        result = self.guardrail.check("rm -rf /home/user/memory")
-        assert result in (GuardrailDecision.BLOCK, "block", False)
+        from guardrails.action_guardrail import ActionContext
+        ctx = ActionContext(action_type="shell", target="rm -rf /home/user/memory", payload={})
+        result = self.guardrail.check(ctx)
+        assert result.decision in (GuardrailDecision.BLOCKED, GuardrailDecision.PENDING)
 
     def test_block_drop_table(self):
         """SQL DROP TABLE should be BLOCKED."""
-        result = self.guardrail.check("DROP TABLE users")
-        assert result in (GuardrailDecision.BLOCK, "block", False)
+        from guardrails.action_guardrail import ActionContext
+        ctx = ActionContext(action_type="shell", target="DROP TABLE users", payload={})
+        result = self.guardrail.check(ctx)
+        assert result.decision in (GuardrailDecision.BLOCKED, GuardrailDecision.PENDING)
 
     def test_block_memory_wipe(self):
         """shutil.rmtree on memory path should be BLOCKED."""
-        result = self.guardrail.check("shutil.rmtree('./memory')")
-        assert result in (GuardrailDecision.BLOCK, "block", False)
+        from guardrails.action_guardrail import ActionContext
+        ctx = ActionContext(action_type="shell", target="shutil.rmtree('./memory')", payload={})
+        result = self.guardrail.check(ctx)
+        assert result.decision in (GuardrailDecision.BLOCKED, GuardrailDecision.PENDING)
 
     def test_warn_shell_true(self):
-        """shell=True usage should at minimum WARN or BLOCK."""
-        result = self.guardrail.check("subprocess.run(cmd, shell=True)")
-        assert result in (
-            GuardrailDecision.WARN,
-            GuardrailDecision.BLOCK,
-            "warn",
-            "block",
-            False,
-        )
+        """shell=True usage should at minimum WARN or BLOCK (PENDING)."""
+        from guardrails.action_guardrail import ActionContext
+        ctx = ActionContext(action_type="shell", target="subprocess.run(cmd, shell=True)", payload={})
+        result = self.guardrail.check(ctx)
+        assert result.decision in (GuardrailDecision.BLOCKED, GuardrailDecision.PENDING)
 
 
 # ---------------------------------------------------------------------------

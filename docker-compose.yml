@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  openclaw:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./memory:/app/memory
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  # Optional: Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    restart: always
