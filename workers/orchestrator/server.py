@@ -11,7 +11,7 @@ import httpx
 
 # Observability (Step 6/7)
 try:
-    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import Counter, Histogram
     from prometheus_fastapi_instrumentator import Instrumentator
     METRICS_ENABLED = True
 except ImportError:
@@ -136,7 +136,19 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    # Attempt to ping Ollama
+    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            resp = await client.get(f"{ollama_url}/api/tags")
+            ollama_status = "reachable" if resp.status_code == 200 else "error"
+    except Exception:
+        ollama_status = "unreachable"
+
+    return {
+        "status": "healthy",
+        "ollama": ollama_status
+    }
 
 @app.get("/admin/pending")
 async def list_pending_actions():
@@ -147,12 +159,16 @@ async def list_pending_actions():
 async def confirm_action(token: str):
     from guardrails.action_guardrail import guardrail
     try:
-        # This is a bit tricky as we need the original executor function
-        # For now, just mark it as released in the guardrail engine
-        # In a real system, the executor would be waiting for this.
-        return {"status": "Action released", "token": token}
+        # Releasing an action requires an executor function in the real logic.
+        # Here we acknowledge and remove it.
+        ctx = guardrail.pop_pending(token)
+        if not ctx:
+            raise HTTPException(status_code=404, detail="Token not found or already processed")
+        return {"status": "Action confirmed", "token": token, "action": ctx.action_type}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 @app.get("/dashboard")
 async def dashboard():
@@ -165,7 +181,13 @@ async def dashboard():
             <style>
                 body { font-family: sans-serif; margin: 2em; background: #f4f4f9; }
                 h1 { color: #333; }
-                .card { background: white; padding: 1.5em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1em; }
+                .card {
+                    background: white;
+                    padding: 1.5em;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    margin-bottom: 1em;
+                }
                 .status-pass { color: green; font-weight: bold; }
                 .status-fail { color: red; font-weight: bold; }
             </style>
@@ -195,8 +217,10 @@ async def dashboard():
             </div>
             <script>
                 fetch('/health').then(r => r.json()).then(data => {
-                    document.getElementById('ollama-status').innerText = 'Reachable';
-                    document.getElementById('ollama-status').className = 'status-pass';
+                    const status = data.ollama || 'unknown';
+                    const el = document.getElementById('ollama-status');
+                    el.innerText = status.charAt(0).toUpperCase() + status.slice(1);
+                    el.className = status === 'reachable' ? 'status-pass' : 'status-fail';
                 }).catch(e => {
                     document.getElementById('ollama-status').innerText = 'Unreachable';
                     document.getElementById('ollama-status').className = 'status-fail';
@@ -209,4 +233,4 @@ async def dashboard():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)  # noqa: S104

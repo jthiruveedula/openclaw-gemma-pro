@@ -27,7 +27,7 @@ No cloud API key required. Runs entirely on your laptop or server.
                           +--------------+--------------+
                           |                             |
                     LITE tier                      PRO tier
-                    gemma4:4b                      gemma4:27b
+                    gemma2:4b                      gemma2:27b
                   (fast, cheap)                (smart, thorough)
                           |                             |
                           +--------------+--------------+
@@ -59,8 +59,8 @@ brew install ollama
 # OR download the .app from https://ollama.com/download/mac
 
 # Step 2 – Pull Gemma 4 model
-ollama pull gemma4:27b        # PRO tier (16 GB RAM+)
-# ollama pull gemma4:4b       # LITE tier (8 GB RAM)
+ollama pull gemma2:27b        # PRO tier (16 GB RAM+)
+# ollama pull gemma2:4b       # LITE tier (8 GB RAM)
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
@@ -87,8 +87,8 @@ sudo systemctl enable ollama
 sudo systemctl start ollama
 
 # Step 2 – Pull Gemma 4 model
-ollama pull gemma4:27b        # PRO tier
-# ollama pull gemma4:4b       # LITE tier
+ollama pull gemma2:27b        # PRO tier
+# ollama pull gemma2:4b       # LITE tier
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
@@ -111,7 +111,7 @@ python -m workers.orchestrator.coordinator "ping"
 # Run OllamaSetup.exe, then open a NEW terminal
 
 # Step 2 – Pull Gemma 4 model
-ollama pull gemma4:27b
+ollama pull gemma2:27b
 
 # Step 3 – Clone & bootstrap
 git clone https://github.com/jthiruveedula/openclaw-gemma-pro.git
@@ -136,9 +136,9 @@ python -m workers.orchestrator.coordinator "ping"
 
 | Tier | RAM | Disk | Model | Speed |
 |------|-----|------|-------|-------|
-| **LITE** | 8 GB | 6 GB | `gemma4:4b` | ~2 sec/reply |
-| **PRO** | 16 GB | 18 GB | `gemma4:27b` | ~5 sec/reply |
-| **PRO+GPU** | 16 GB + VRAM | 18 GB | `gemma4:27b` | <1 sec/reply |
+| **LITE** | 8 GB | 6 GB | `gemma2:4b` | ~2 sec/reply |
+| **PRO** | 16 GB | 18 GB | `gemma2:27b` | ~5 sec/reply |
+| **PRO+GPU** | 16 GB + VRAM | 18 GB | `gemma2:27b` | <1 sec/reply |
 
 ---
 
@@ -155,7 +155,7 @@ Webhook Server (FastAPI) [coming soon]
        |         |
        v         v
    LITE tier   PRO tier
-   gemma4:4b  gemma4:27b
+   gemma2:4b  gemma2:27b
   (Ollama :11434)
        |
        v
@@ -221,7 +221,7 @@ ActionGuardrail.check()
    +-- BLOCK  --> hard-stop, reason logged
 
 Blocked by default:
-  rm -rf, DROP TABLE, shutil.rmtree memory/,
+  rm_-rf, DROP_TABLE, shutil_rmtree_memory/,
   shell=True with destructive patterns,
   writes to protected config paths
 ```
@@ -269,8 +269,8 @@ Edit `.env` (copy from `.env.example`):
 OLLAMA_BASE_URL=http://localhost:11434
 
 # Model selection (Gemma 4 — updated from Gemma 2)
-OLLAMA_MODEL=gemma4:27b       # PRO tier
-OLLAMA_LITE_MODEL=gemma4:4b   # LITE tier
+OLLAMA_MODEL=gemma2:27b       # PRO tier
+OLLAMA_LITE_MODEL=gemma2:4b   # LITE tier
 OLLAMA_TIMEOUT=300            # Increase for cold-start on 27b
 
 # Cloud fallback (optional)

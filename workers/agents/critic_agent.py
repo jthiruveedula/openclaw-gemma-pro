@@ -17,7 +17,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
-MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+MODEL = os.getenv("OLLAMA_MODEL", "gemma2:27b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 
 CRITIC_PROMPT = """

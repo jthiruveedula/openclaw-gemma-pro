@@ -58,3 +58,13 @@ pytest-asyncio==0.24.0
 
 # Code coverage measurement
 pytest-cov==6.0.0
+
+# ====================================================================
+# Observability & Monitoring
+# ====================================================================
+# Structured logging
+structlog==25.5.0
+
+# Prometheus metrics
+prometheus-client==0.25.0
+prometheus-fastapi-instrumentator==7.0.0

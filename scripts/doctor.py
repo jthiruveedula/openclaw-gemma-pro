@@ -101,7 +101,7 @@ def _ollama_list() -> List[str]:
         return []
 
 def check_pro_model_pulled() -> CheckResult:
-    model = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+    model = os.getenv("OLLAMA_MODEL", "gemma2:27b")
     lines = _ollama_list()
     tag = model.split(":")[0].lower() if ":" in model else model.lower()
     if any(tag in line for line in lines):
@@ -113,7 +113,7 @@ def check_pro_model_pulled() -> CheckResult:
     )
 
 def check_lite_model_pulled() -> CheckResult:
-    model = os.getenv("OLLAMA_LITE_MODEL", "gemma4:4b")
+    model = os.getenv("OLLAMA_LITE_MODEL", "gemma2:4b")
     lines = _ollama_list()
     tag = model.split(":")[0].lower() if ":" in model else model.lower()
     if any(tag in line for line in lines):
@@ -213,7 +213,7 @@ def check_ram() -> CheckResult:
         return CheckResult(
             "Available RAM", Status.WARN,
             f"{ram_gb:.1f} GB < 16 GB recommended for PRO model",
-            hint="gemma4:27b requires >= 16 GB RAM. Use OLLAMA_LITE_MODEL for smaller machines.",
+            hint="gemma2:27b requires >= 16 GB RAM. Use OLLAMA_LITE_MODEL for smaller machines.",
         )
     except ImportError:
         return CheckResult(

@@ -283,6 +283,9 @@ class GuardrailEngine:
     def list_pending(self) -> list[dict]:
         return _PENDING.list_pending()
 
+    def pop_pending(self, token: str) -> ActionContext | None:
+        return _PENDING.pop(token)
+
     def _classify(self, ctx: ActionContext) -> ActionCategory:
         """Classify an action into a guardrail category."""
         # Direct type map

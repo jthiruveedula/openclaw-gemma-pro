@@ -31,7 +31,7 @@ import httpx
 # Config (override via env vars)
 # ---------------------------------------------------------------------------
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:27b")
 MEMORY_BASE = Path(os.getenv("MEMORY_BASE_DIR", "./memory"))
 RAW_DIR = MEMORY_BASE / "raw"
 DAILY_DIR = MEMORY_BASE / "daily"

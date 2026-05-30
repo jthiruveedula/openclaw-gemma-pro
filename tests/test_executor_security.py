@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -40,7 +39,7 @@ class TestSafeResolve:
             "../../../../etc/passwd",
             "sub/../../escape.txt",
             "/etc/passwd",
-            "/tmp/escape.txt",
+            "/tmp/escape.txt",  # noqa: S108
         ],
     )
     def test_path_traversal_rejected(self, tmp_path: Path, evil: str) -> None:

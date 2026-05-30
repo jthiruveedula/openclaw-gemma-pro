@@ -28,7 +28,7 @@ except Exception:  # noqa: BLE001
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") + "/api/generate"
-MODEL = os.getenv("OLLAMA_MODEL", "gemma4:27b")
+MODEL = os.getenv("OLLAMA_MODEL", "gemma2:27b")
 MEMORY_ROOT = Path(os.getenv("MEMORY_BASE_DIR", "memory"))
 SUMMARY_TIMEOUT = int(os.getenv("MEMORY_SUMMARY_TIMEOUT", "60"))
 

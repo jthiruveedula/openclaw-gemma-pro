@@ -1,23 +1,23 @@
 {
   "agents": {
     "defaults": {
-      "model": "ollama/gemma4:27b",
+      "model": "ollama/gemma2:27b",
       "models": [
-        "ollama/gemma4:27b",
-        "ollama/gemma4:12b",
-        "ollama/gemma4"
+        "ollama/gemma2:27b",
+        "ollama/gemma2:12b",
+        "ollama/gemma2"
       ],
       "maxTokens": 8192,
       "temperature": 0.3
     },
     "lite": {
-      "model": "ollama/gemma4:4b",
+      "model": "ollama/gemma2:4b",
       "maxTokens": 2048,
       "temperature": 0.2,
       "description": "Fast model for simple replies, rewrites, and short tasks"
     },
     "pro": {
-      "model": "ollama/gemma4:27b",
+      "model": "ollama/gemma2:27b",
       "maxTokens": 16384,
       "temperature": 0.4,
       "description": "Full model for coding, planning, memory synthesis, multi-step tool use"
