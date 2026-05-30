@@ -12,6 +12,7 @@ Fixes issue #5: https://github.com/jthiruveedula/openclaw-gemma-pro/issues/5
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import os
 import subprocess
 import sys

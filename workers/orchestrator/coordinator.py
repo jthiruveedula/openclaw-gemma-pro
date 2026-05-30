@@ -23,6 +23,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+try:
+    from prometheus_client import Counter
+    TASK_COUNTER = Counter("openclaw_coordinator_tasks_total", "Total tasks by coordinator", ["agent_type", "status"])
+except ImportError:
+    TASK_COUNTER = None
+
 from guardrails.action_guardrail import GuardrailEngine as ActionGuardrail
 from workers.agents.planner_agent import PlannerAgent
 from workers.agents.executor_agent import ExecutorAgent
@@ -225,9 +231,13 @@ class AgentCoordinator:
             result = await self._dispatch(task)
             task.result = result
             task.status = TaskStatus.COMPLETED
+            if TASK_COUNTER:
+                TASK_COUNTER.labels(agent_type=task.agent_type, status="completed").inc()
         except Exception as exc:  # noqa: BLE001
             task.error = str(exc)
             task.status = TaskStatus.FAILED
+            if TASK_COUNTER:
+                TASK_COUNTER.labels(agent_type=task.agent_type, status="failed").inc()
             logger.error(
                 "[coordinator] Task %s failed: %s", task.name, exc
             )
